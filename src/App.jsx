@@ -21,23 +21,40 @@ function App() {
 
   const [validReps, setValidReps] = useState(0);
   const [noReps, setNoReps] = useState(0);
-  
-  // Stato per mostrare a schermo il motivo della No-Rep
   const [faultReason, setFaultReason] = useState("");
+  
+  // Gestione Esercizio: 'SQUAT' o 'DEADLIFT'
+  const [uiExercise, setUiExercise] = useState('SQUAT');
+  const exerciseRef = useRef('SQUAT'); 
 
-  // Macchina a stati e metriche Powerlifting
   const movementState = useRef('STANDING'); 
   const lastAngle = useRef(180);
-  const smoothedAngleRef = useRef(null); 
+  const smoothedKneeRef = useRef(null); 
+  const smoothedHipRef = useRef(null); 
 
-  // Oggetto per tracciare rigorosamente le regole IPF
   const strictMetrics = useRef({
     faults: new Set(),
-    startX: null,          // Posizione iniziale del piede
-    maxAscentAngle: 0,     // Per tracciare il doppio rimbalzo
-    lockedAtStart: false,  // Ginocchia bloccate in partenza
-    deepEnough: false      // Parallelo rotto
+    startX: null,          
+    maxAscentAngle: 0,     
+    lockedAtStart: false,  
+    deepEnough: false,
+    minWristY: 1.0         // Per tracciare la traiettoria verticale del bilanciere
   });
+
+  const toggleExercise = () => {
+    const nextEx = uiExercise === 'SQUAT' ? 'DEADLIFT' : 'SQUAT';
+    setUiExercise(nextEx);
+    exerciseRef.current = nextEx;
+    
+    // Reset di tutti i contatori e stati al cambio di esercizio
+    setValidReps(0);
+    setNoReps(0);
+    setFaultReason("");
+    movementState.current = 'STANDING';
+    strictMetrics.current = { faults: new Set(), startX: null, maxAscentAngle: 0, lockedAtStart: false, deepEnough: false, minWristY: 1.0 };
+    smoothedKneeRef.current = null;
+    smoothedHipRef.current = null;
+  };
 
   useEffect(() => {
     async function loadMediaPipeModel() {
@@ -87,6 +104,7 @@ function App() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const landmarker = poseLandmarkerRef.current;
+    const currentEx = exerciseRef.current;
 
     if (video && canvas && landmarker && video.readyState >= 2) {
       const ctx = canvas.getContext("2d");
@@ -103,115 +121,144 @@ function App() {
       if (results.landmarks && results.landmarks.length > 0) {
         const landmarks = results.landmarks[0];
         
-        // Punti analizzati (Lato sinistro)
         const shoulder = landmarks[11];
         const hip = landmarks[23];
         const knee = landmarks[25];
         const ankle = landmarks[27];
-        const wrist = landmarks[15]; // Polso per contatto braccia-gambe
+        const wrist = landmarks[15]; 
 
-        let angle = null;
-        let isDeepEnough = false;
+        let kneeAngle = null;
+        let hipAngle = null;
+        let isTargetReached = false;
 
-        if (hip.visibility > 0.4 && knee.visibility > 0.4 && ankle.visibility > 0.4) {
-          const rawAngle = calculateAngle(hip, knee, ankle);
+        if (hip.visibility > 0.4 && knee.visibility > 0.4 && ankle.visibility > 0.4 && shoulder.visibility > 0.4) {
           
-          if (smoothedAngleRef.current === null) smoothedAngleRef.current = rawAngle;
-          else smoothedAngleRef.current = (rawAngle * 0.15) + (smoothedAngleRef.current * 0.85);
-          
-          angle = smoothedAngleRef.current;
+          // Smoothing Ginocchio
+          const rawKneeAngle = calculateAngle(hip, knee, ankle);
+          if (smoothedKneeRef.current === null) smoothedKneeRef.current = rawKneeAngle;
+          else smoothedKneeRef.current = (rawKneeAngle * 0.15) + (smoothedKneeRef.current * 0.85);
+          kneeAngle = smoothedKneeRef.current;
+
+          // Smoothing Anca (Postura eretta)
+          const rawHipAngle = calculateAngle(shoulder, hip, knee);
+          if (smoothedHipRef.current === null) smoothedHipRef.current = rawHipAngle;
+          else smoothedHipRef.current = (rawHipAngle * 0.15) + (smoothedHipRef.current * 0.85);
+          hipAngle = smoothedHipRef.current;
+
           const metrics = strictMetrics.current;
 
-          // Regola 4 (Profondità): La piega dell'anca deve scendere sotto la parte superiore del ginocchio.
-          // Nelle coordinate Y del canvas, i valori aumentano verso il basso. Quindi Hip Y > Knee Y significa anca più bassa.
-          if (hip.y > knee.y && angle < 95) {
-            metrics.deepEnough = true;
+          // ==============================
+          // LOGICA SQUAT
+          // ==============================
+          if (currentEx === 'SQUAT') {
+            if (hip.y > knee.y && kneeAngle < 95) metrics.deepEnough = true;
+            isTargetReached = metrics.deepEnough;
+
+            const isKneeLocked = kneeAngle > 165;
+            const wristKneeDist = Math.hypot(wrist.x - knee.x, wrist.y - knee.y);
+            const isArmTouchingLeg = wrist.visibility > 0.4 && wristKneeDist < 0.05;
+
+            if (movementState.current === 'STANDING') {
+              if (isKneeLocked) {
+                metrics.lockedAtStart = true;
+                metrics.startX = ankle.x; 
+              }
+              if (kneeAngle < 150) {
+                movementState.current = 'DESCENDING';
+                metrics.maxAscentAngle = 0;
+                if (!metrics.lockedAtStart) metrics.faults.add("Ginocchia non bloccate in partenza");
+              }
+            } 
+            else if (movementState.current === 'DESCENDING') {
+              if (kneeAngle > lastAngle.current + 2) {
+                movementState.current = 'ASCENDING';
+                metrics.maxAscentAngle = kneeAngle;
+              }
+            } 
+            else if (movementState.current === 'ASCENDING') {
+              if (kneeAngle > metrics.maxAscentAngle) metrics.maxAscentAngle = kneeAngle;
+              else if (metrics.maxAscentAngle - kneeAngle > 4) metrics.faults.add("Doppio rimbalzo (discesa in risalita)");
+
+              if (kneeAngle > 160) {
+                if (!metrics.deepEnough) metrics.faults.add("Mancato superamento del parallelo");
+                if (metrics.faults.size === 0) { setValidReps(prev => prev + 1); setFaultReason(""); } 
+                else { setNoReps(prev => prev + 1); setFaultReason(Array.from(metrics.faults).join(" • ")); }
+                
+                movementState.current = 'STANDING';
+                metrics.faults.clear();
+                metrics.lockedAtStart = false;
+                metrics.deepEnough = false;
+                if (ankle.visibility > 0.4) metrics.startX = ankle.x;
+              }
+            }
+            if (movementState.current !== 'STANDING') {
+              if (metrics.startX !== null && Math.abs(ankle.x - metrics.startX) > 0.04) metrics.faults.add("Passo / Movimento dei piedi");
+              if (isArmTouchingLeg) metrics.faults.add("Contatto tra braccia e gambe");
+            }
+            lastAngle.current = kneeAngle;
           }
-          isDeepEnough = metrics.deepEnough;
 
-          const isKneeLocked = angle > 165;
-          // Calcola distanza polso-ginocchio (Regola 6) per contatto
-          const wristKneeDist = Math.hypot(wrist.x - knee.x, wrist.y - knee.y);
-          const isArmTouchingLeg = wrist.visibility > 0.4 && wristKneeDist < 0.05;
+          // ==============================
+          // LOGICA DEADLIFT
+          // ==============================
+          else if (currentEx === 'DEADLIFT') {
+            const isKneesLocked = kneeAngle > 165;
+            const isHipsLocked = hipAngle > 165;
+            const isErect = isKneesLocked && isHipsLocked;
+            isTargetReached = isErect; // Diventa verde alla chiusura dell'alzata
 
-          // --- LOGICA IPF POWERLIFTING ---
-          
-          // FASE 1: IN PIEDI / SETUP
-          if (movementState.current === 'STANDING') {
-            if (isKneeLocked) {
-              metrics.lockedAtStart = true;
-              metrics.startX = ankle.x; // Fissa la posizione iniziale del piede
+            // FASE DI SETUP: Atleta abbassato, bilanciere a terra
+            if (movementState.current === 'STANDING' || movementState.current === 'DROPPING') {
+              if (!isErect && wrist.y > 0.65) { 
+                movementState.current = 'SETUP';
+                metrics.faults.clear();
+                metrics.minWristY = wrist.y;
+                setFaultReason("");
+              }
             }
-            
-            // Inizio discesa
-            if (angle < 150) {
-              movementState.current = 'DESCENDING';
-              metrics.maxAscentAngle = 0;
-              
-              // Regola 2: Ginocchia non bloccate in partenza
-              if (!metrics.lockedAtStart) metrics.faults.add("Ginocchia non bloccate in partenza");
-            }
-          } 
-          
-          // FASE 2: DISCESA
-          else if (movementState.current === 'DESCENDING') {
-            // Inversione del movimento (buca)
-            if (angle > lastAngle.current + 2) {
-              movementState.current = 'ASCENDING';
-              metrics.maxAscentAngle = angle;
-            }
-          } 
-          
-          // FASE 3: RISALITA E CHIUSURA
-          else if (movementState.current === 'ASCENDING') {
-            
-            // Regola 1: Doppio rimbalzo. Se l'angolo diminuisce di colpo in risalita...
-            if (angle > metrics.maxAscentAngle) {
-              metrics.maxAscentAngle = angle;
-            } else if (metrics.maxAscentAngle - angle > 4) {
-              metrics.faults.add("Doppio rimbalzo (discesa in risalita)");
-            }
-
-            // Conclusione ripetizione (Torno su)
-            if (angle > 160) {
-              // Regola 4: Parallelo
-              if (!metrics.deepEnough) metrics.faults.add("Mancato superamento del parallelo");
-
-              if (metrics.faults.size === 0) {
-                setValidReps(prev => prev + 1);
-                setFaultReason(""); // Nessun errore
+            // FASE DI TRAZIONE (INIZIO)
+            else if (movementState.current === 'SETUP') {
+              // Il polso sale (Y diminuisce) di oltre il 2%
+              if (wrist.y < metrics.minWristY - 0.02) {
+                movementState.current = 'LIFTING';
               } else {
-                setNoReps(prev => prev + 1);
-                // Estrae gli errori e li formatta
-                setFaultReason(Array.from(metrics.faults).join(" • "));
+                metrics.minWristY = Math.max(metrics.minWristY, wrist.y);
+              }
+            }
+            // FASE DI ASCESA
+            else if (movementState.current === 'LIFTING') {
+              // Aggiorna il punto più alto raggiunto dal bilanciere (valore Y più piccolo)
+              if (wrist.y < metrics.minWristY) {
+                metrics.minWristY = wrist.y;
+              } 
+              // Regola: Movimento verso il basso. Se la Y del polso aumenta oltre la tolleranza
+              else if (wrist.y > metrics.minWristY + 0.02) {
+                metrics.faults.add("Movimento verso il basso (Ramping/Hitching)");
               }
 
-              // Reset totale per la ripetizione successiva
-              movementState.current = 'STANDING';
-              metrics.faults.clear();
-              metrics.lockedAtStart = false;
-              metrics.deepEnough = false;
-              if (ankle.visibility > 0.4) metrics.startX = ankle.x;
+              // Chiusura alzata
+              if (isErect) {
+                if (metrics.faults.size === 0) {
+                  setValidReps(prev => prev + 1);
+                  setFaultReason("");
+                } else {
+                  setNoReps(prev => prev + 1);
+                  setFaultReason(Array.from(metrics.faults).join(" • "));
+                }
+                movementState.current = 'LOCKED';
+              }
+            }
+            // FASE DI CHIUSURA / RITORNO A TERRA
+            else if (movementState.current === 'LOCKED') {
+              // Se le articolazioni si flettono e il bilanciere scende, preparati per la rep successiva
+              if (!isErect && wrist.y > metrics.minWristY + 0.05) {
+                movementState.current = 'DROPPING';
+              }
             }
           }
 
-          // CONTROLLI GLOBALI (attivi durante tutto il sollevamento)
-          if (movementState.current !== 'STANDING') {
-            // Regola 3 e 5: Movimento del piede. Tolleranza del 4% (0.04) sulla X del canvas
-            if (metrics.startX !== null && Math.abs(ankle.x - metrics.startX) > 0.04) {
-              metrics.faults.add("Passo / Movimento dei piedi");
-            }
-            // Regola 6: Contatto braccia-gambe
-            if (isArmTouchingLeg) {
-              metrics.faults.add("Contatto tra braccia e gambe");
-            }
-          }
-
-          lastAngle.current = angle;
-
-          // --- DISEGNO ---
-          const skeletonColor = isDeepEnough ? "#00ff88" : "#c084fc";
-          
+          // --- DISEGNO CONDIVISO ---
+          const skeletonColor = isTargetReached ? "#00ff88" : "#c084fc";
           ctx.lineWidth = 5;
           ctx.strokeStyle = skeletonColor; 
           
@@ -226,25 +273,24 @@ function App() {
             }
           });
 
-          ctx.fillStyle = isDeepEnough ? "#00ff88" : "#ffffff";
+          ctx.fillStyle = isTargetReached ? "#00ff88" : "#ffffff";
           [11, 23, 25, 27, 31, 15].forEach(idx => {
             const p = landmarks[idx];
             if (p.visibility > 0.4) {
               ctx.beginPath();
-              // Polso (15) colorato in grigio per differenziarlo
               if (idx === 15) ctx.fillStyle = "#64748b"; 
-              else ctx.fillStyle = isDeepEnough ? "#00ff88" : "#ffffff";
-              
+              else ctx.fillStyle = isTargetReached ? "#00ff88" : "#ffffff";
               ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, 2 * Math.PI);
               ctx.fill();
             }
           });
 
-          // Testo angolo
-          const angleText = `${Math.round(angle)}°`;
-          ctx.font = "bold 24px sans-serif";
-          const textX = knee.x * canvas.width + 25;
-          const textY = knee.y * canvas.height;
+          // Testo UI (Angolo Ginocchio per Squat, Angolo Anca/Ginocchio per Stacco)
+          let angleText = currentEx === 'SQUAT' ? `${Math.round(kneeAngle)}°` : `H:${Math.round(hipAngle)}° K:${Math.round(kneeAngle)}°`;
+          ctx.font = "bold 20px sans-serif";
+          
+          const textX = hip.x * canvas.width + 25;
+          const textY = hip.y * canvas.height;
           const textWidth = ctx.measureText(angleText).width;
 
           ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
@@ -252,7 +298,7 @@ function App() {
           ctx.roundRect(textX - 10, textY - 24, textWidth + 20, 34, 8);
           ctx.fill();
 
-          ctx.fillStyle = isDeepEnough ? "#00ff88" : "#ffffff";
+          ctx.fillStyle = isTargetReached ? "#00ff88" : "#ffffff";
           ctx.fillText(angleText, textX, textY);
         }
       }
@@ -270,7 +316,7 @@ function App() {
     <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col items-center p-4 font-sans">
       <header className="w-full max-w-md text-center my-4">
         <h1 className="text-2xl font-bold tracking-tight text-indigo-400">FormCheck AI</h1>
-        <p className="text-xs text-slate-400 mt-1">Modalità Gara Powerlifting</p>
+        <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">{uiExercise} IPF MODE</p>
       </header>
 
       <section className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-4 flex justify-around mb-4 shadow-lg">
@@ -285,7 +331,6 @@ function App() {
         </div>
       </section>
 
-      {/* Riquadro Messaggi No-Rep */}
       {faultReason && (
         <div className="w-full max-w-md mb-4 bg-rose-950/50 border border-rose-800 rounded-xl p-3 text-center shadow-lg">
           <p className="text-xs font-bold uppercase tracking-wider text-rose-400 mb-1">Motivo No-Rep:</p>
@@ -315,9 +360,14 @@ function App() {
 
       <footer className="w-full max-w-md mt-4 flex gap-2">
         <button 
+          onClick={toggleExercise}
+          className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl font-medium text-sm transition-colors shadow-md">
+          Passa a {uiExercise === 'SQUAT' ? 'DEADLIFT' : 'SQUAT'}
+        </button>
+        <button 
           onClick={() => { setValidReps(0); setNoReps(0); setFaultReason(""); }}
           className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 rounded-xl font-medium text-sm transition-colors shadow-md text-slate-300">
-          Azzera Contatori
+          Azzera
         </button>
       </footer>
     </div>
