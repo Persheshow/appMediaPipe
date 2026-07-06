@@ -1,24 +1,43 @@
 import { EXERCISES, SMOOTHING } from '../config/exercises';
 
-// ── SMOOTHING ──────────────────────────────────────────────────────────────────
-
 export function smoothAngle(prev, current) {
   if (prev === null) return current;
   return (current * SMOOTHING.alpha) + (prev * SMOOTHING.beta);
 }
 
-// ── CALCOLO ANGOLO ─────────────────────────────────────────────────────────────
-
+// ── CALCOLO ANGOLO 3D (Prodotto Scalare) ───────────────────────────────────────
 export function calculateAngle(a, b, c) {
-  const radians =
-    Math.atan2(c.y - b.y, c.x - b.x) -
-    Math.atan2(a.y - b.y, a.x - b.x);
-  let angle = Math.abs((radians * 180.0) / Math.PI);
-  if (angle > 180.0) angle = 360.0 - angle;
-  return angle;
-}
+  // Vettore BA (da b verso a)
+  const ba = { 
+    x: a.x - b.x, 
+    y: a.y - b.y, 
+    z: (a.z || 0) - (b.z || 0) 
+  };
+  
+  // Vettore BC (da b verso c)
+  const bc = { 
+    x: c.x - b.x, 
+    y: c.y - b.y, 
+    z: (c.z || 0) - (b.z || 0) 
+  };
 
-// ── STATO INIZIALE ─────────────────────────────────────────────────────────────
+  // Prodotto scalare
+  const dotProduct = (ba.x * bc.x) + (ba.y * bc.y) + (ba.z * bc.z);
+
+  // Magnitudine (lunghezza) dei vettori
+  const magBA = Math.sqrt(ba.x * ba.x + ba.y * ba.y + ba.z * ba.z);
+  const magBC = Math.sqrt(bc.x * bc.x + bc.y * bc.y + bc.z * bc.z);
+
+  if (magBA === 0 || magBC === 0) return 0;
+
+  // Coseno dell'angolo (limitato tra -1 e 1 per evitare errori di precisione di JS)
+  let cosAngle = dotProduct / (magBA * magBC);
+  cosAngle = Math.max(-1.0, Math.min(1.0, cosAngle));
+
+  // Calcolo in radianti e conversione in gradi
+  const radians = Math.acos(cosAngle);
+  return (radians * 180.0) / Math.PI;
+}
 
 export function createInitialState() {
   return {
@@ -36,8 +55,6 @@ export function createInitialState() {
     },
   };
 }
-
-// ── LOGICA SQUAT ───────────────────────────────────────────────────────────────
 
 export function processSquat(state, landmarks) {
   const cfg = EXERCISES.SQUAT.thresholds;
@@ -62,11 +79,9 @@ export function processSquat(state, landmarks) {
     }
   }
   else if (state.movementState === 'DESCENDING') {
-    // Controlla rottura del parallelo
     if (lm[hip].y > lm[knee].y && kneeAngle < cfg.bottomKnee) {
       m.deepEnough = true;
     }
-    // Inizia risalita
     if (kneeAngle > state.lastAngle + 2) {
       state.movementState = 'ASCENDING';
     }
@@ -84,10 +99,9 @@ export function processSquat(state, landmarks) {
   }
 
   state.lastAngle = kneeAngle;
-  return { state, event, kneeAngle, hipAngle: state.smoothedHip };
+  // Modificato: uso di primaryAngle e secondaryAngle
+  return { state, event, primaryAngle: kneeAngle, secondaryAngle: state.smoothedHip };
 }
-
-// ── LOGICA DEADLIFT ────────────────────────────────────────────────────────────
 
 export function processDeadlift(state, landmarks) {
   const cfg = EXERCISES.DEADLIFT.thresholds;
@@ -114,38 +128,32 @@ export function processDeadlift(state, landmarks) {
   let event = null;
 
   if (state.movementState === 'STANDING' || state.movementState === 'DROPPING') {
-    // Atleta si abbassa — polso scende verso terra
     if (!isErect && wristVisible && lm[wrist].y > cfg.setupWristY) {
       state.movementState = 'SETUP';
       m.minWristY = lm[wrist].y;
     }
   }
   else if (state.movementState === 'SETUP') {
-    // Aggiorna posizione più bassa del polso
     if (wristVisible) m.minWristY = Math.max(m.minWristY, lm[wrist].y);
-    // Polso inizia a salire → trazione iniziata
     if (wristVisible && lm[wrist].y < m.minWristY - cfg.liftThreshold) {
       state.movementState = 'LIFTING';
     }
   }
   else if (state.movementState === 'LIFTING') {
-    // Corpo eretto → rep completata
     if (isErect) {
       event = { type: 'VALID_REP', faults: [] };
       state.movementState = 'LOCKED';
     }
   }
   else if (state.movementState === 'LOCKED') {
-    // Atleta abbassa il bilanciere → pronto per prossima rep
     if (!isErect && wristVisible && lm[wrist].y > m.minWristY + cfg.dropThreshold) {
       state.movementState = 'DROPPING';
     }
   }
 
-  return { state, event, kneeAngle, hipAngle };
+  // Modificato: uso di primaryAngle e secondaryAngle (Hip come primario)
+  return { state, event, primaryAngle: hipAngle, secondaryAngle: kneeAngle };
 }
-
-// ── LOGICA OVERHEAD PRESS ────────────────────────────────────────────────────────────
 
 export function processOverheadPress(state, landmarks) {
   const cfg = EXERCISES.OVERHEAD_PRESS.thresholds;
@@ -156,14 +164,11 @@ export function processOverheadPress(state, landmarks) {
     return { state, event: null };
   }
 
-  // Angolo gomito — movimento principale
   const rawElbow = calculateAngle(lm[shoulder], lm[elbow], lm[wrist]);
   state.smoothedKnee = smoothAngle(state.smoothedKnee, rawElbow);
   const elbowAngle = state.smoothedKnee;
 
-  // Angolo tronco — controllo iperlordosi
-  // Usiamo un punto virtuale sopra la spalla come riferimento verticale
-  const vertical = { x: lm[shoulder].x, y: lm[shoulder].y - 0.1 };
+  const vertical = { x: lm[shoulder].x, y: lm[shoulder].y - 0.1, z: lm[shoulder].z };
   const rawTrunk = calculateAngle(vertical, lm[shoulder], lm[hip]);
   state.smoothedHip = smoothAngle(state.smoothedHip, rawTrunk);
   const trunkAngle = state.smoothedHip;
@@ -172,11 +177,9 @@ export function processOverheadPress(state, landmarks) {
   let event = null;
 
   if (state.movementState === 'STANDING') {
-    // Braccia distese in partenza
     if (elbowAngle > cfg.topElbow) {
       m.lockedAtStart = true;
     }
-    // Inizia discesa
     if (elbowAngle < 140) {
       state.movementState = 'DESCENDING';
       m.deepEnough = false;
@@ -184,25 +187,20 @@ export function processOverheadPress(state, landmarks) {
     }
   }
   else if (state.movementState === 'DESCENDING') {
-    // Bottom raggiunto
     if (elbowAngle < cfg.bottomElbow) {
       m.deepEnough = true;
     }
-    // Controlla iperlordosi durante la discesa
     if (trunkAngle > cfg.maxTrunkLean) {
       m.faults.add('Iperlordosi lombare');
     }
-    // Inizia risalita
     if (elbowAngle > state.lastAngle + 2) {
       state.movementState = 'ASCENDING';
     }
   }
   else if (state.movementState === 'ASCENDING') {
-    // Controlla iperlordosi anche in salita
     if (trunkAngle > cfg.maxTrunkLean) {
       m.faults.add('Iperlordosi lombare');
     }
-    // Lockout raggiunto
     if (elbowAngle > cfg.topElbow) {
       if (!m.deepEnough) m.faults.add('Range di movimento incompleto');
 
@@ -219,10 +217,9 @@ export function processOverheadPress(state, landmarks) {
   }
 
   state.lastAngle = elbowAngle;
-  return { state, event, kneeAngle: elbowAngle, hipAngle: trunkAngle };
+  // Modificato: uso di primaryAngle e secondaryAngle
+  return { state, event, primaryAngle: elbowAngle, secondaryAngle: trunkAngle };
 }
-
-// ── DISPATCHER ─────────────────────────────────────────────────────────────────
 
 export function processFrame(exercise, state, landmarks) {
   if (exercise === 'SQUAT')          return processSquat(state, landmarks);

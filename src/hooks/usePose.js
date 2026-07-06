@@ -2,57 +2,74 @@ import { useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
 
-export function usePose(exercise) {
-  // ── REFS ──────────────────────────────────────────────────────────────────
+export function usePose(exercise, isActive) {
   const videoRef         = useRef(null);
   const canvasRef        = useRef(null);
   const landmarkerRef    = useRef(null);
   const animFrameRef     = useRef(null);
   const repStateRef      = useRef(createInitialState());
 
-  // ── STATE ─────────────────────────────────────────────────────────────────
-  const [isLoading, setIsLoading]   = useState(true);
+  const [isLoading, setIsLoading]   = useState(false);
   const [error, setError]           = useState(null);
   const [validReps, setValidReps]   = useState(0);
   const [noReps, setNoReps]         = useState(0);
   const [faults, setFaults]         = useState([]);
-  const [angles, setAngles]         = useState({ knee: null, hip: null });
+  const [angles, setAngles]         = useState({ primary: null, secondary: null });
 
-  // ── RESET quando cambia esercizio ─────────────────────────────────────────
+  // Reset automatico quando cambia esercizio o si ferma/avvia la fotocamera
   useEffect(() => {
     repStateRef.current = createInitialState();
     setValidReps(0);
     setNoReps(0);
     setFaults([]);
-    setAngles({ knee: null, hip: null });
-  }, [exercise]);
+    setAngles({ primary: null, secondary: null });
+  }, [exercise, isActive]);
 
-  // ── CARICA MEDIAPIPE ──────────────────────────────────────────────────────
+  // ── CARICA MEDIAPIPE (OFFLINE MODE) ───────────────────────────────────────
   useEffect(() => {
+    if (!isActive) return;
+
+    let isMounted = true;
+    setIsLoading(true);
+    setError(null);
+
     async function loadModel() {
       try {
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
-        );
+        const vision = await FilesetResolver.forVisionTasks('/wasm');
+        
         const landmarker = await PoseLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath:
-              'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+            modelAssetPath: '/models/pose_landmarker_lite.task',
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
           numPoses: 1,
         });
-        landmarkerRef.current = landmarker;
+
+        if (isMounted) {
+          landmarkerRef.current = landmarker;
+        } else {
+          landmarker.close();
+        }
       } catch (err) {
-        setError('Errore caricamento modello: ' + err.message);
+        if (isMounted) setError('Errore caricamento modello: ' + err.message);
       }
     }
     loadModel();
-  }, []);
+
+    return () => {
+      isMounted = false;
+      if (landmarkerRef.current) {
+        landmarkerRef.current.close();
+        landmarkerRef.current = null;
+      }
+    };
+  }, [isActive]);
 
   // ── AVVIA CAMERA ──────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!isActive) return;
+
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -75,16 +92,18 @@ export function usePose(exercise) {
     }
     startCamera();
 
-    // Cleanup: ferma la camera quando il componente viene smontato
     return () => {
       if (videoRef.current?.srcObject) {
         videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
       }
     };
-  }, []);
+  }, [isActive]);
 
   // ── LOOP PRINCIPALE ───────────────────────────────────────────────────────
   useEffect(() => {
+    if (!isActive) return;
+
     function drawSkeleton(ctx, landmarks, w, h, isTargetReached) {
       const color = isTargetReached ? '#00ff88' : '#c084fc';
       const connections = [[11, 23], [23, 25], [25, 27], [27, 31]];
@@ -122,7 +141,6 @@ export function usePose(exercise) {
       if (video && canvas && landmarker && video.readyState >= 2) {
         const ctx = canvas.getContext('2d');
 
-        // Sincronizza dimensioni canvas con video
         if (canvas.width !== video.videoWidth) {
           canvas.width  = video.videoWidth;
           canvas.height = video.videoHeight;
@@ -134,18 +152,15 @@ export function usePose(exercise) {
         if (results.landmarks?.length > 0) {
           const lms = results.landmarks[0];
 
-          // Processa la logica rep
-          const { state, event, kneeAngle, hipAngle } = processFrame(
+          const { state, event, primaryAngle, secondaryAngle } = processFrame(
             exercise,
             repStateRef.current,
             lms
           );
           repStateRef.current = state;
 
-          // Aggiorna angoli per l'HUD (throttled — non ad ogni frame)
-          setAngles({ knee: kneeAngle, hip: hipAngle });
+          setAngles({ primary: primaryAngle, secondary: secondaryAngle });
 
-          // Gestisci evento rep
           if (event?.type === 'VALID_REP') {
             setValidReps(prev => prev + 1);
             setFaults([]);
@@ -154,12 +169,12 @@ export function usePose(exercise) {
             setFaults(event.faults);
           }
 
-          // Determina se la posizione target è raggiunta
           const isTarget = exercise === 'SQUAT'
-            ? kneeAngle > 160
-            : kneeAngle > 165 && hipAngle > 165;
+            ? primaryAngle > 160
+            : exercise === 'DEADLIFT' 
+              ? primaryAngle > 165 && secondaryAngle > 165
+              : primaryAngle > 155; 
 
-          // Loading completato al primo frame rilevato
           setIsLoading(false);
 
           drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget);
@@ -174,15 +189,14 @@ export function usePose(exercise) {
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [exercise]);
+  }, [exercise, isActive]);
 
-  // ── RESET MANUALE ─────────────────────────────────────────────────────────
   function reset() {
     repStateRef.current = createInitialState();
     setValidReps(0);
     setNoReps(0);
     setFaults([]);
-    setAngles({ knee: null, hip: null });
+    setAngles({ primary: null, secondary: null });
   }
 
   return {
