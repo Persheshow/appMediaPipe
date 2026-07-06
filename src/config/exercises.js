@@ -1,78 +1,25 @@
 export const EXERCISES = {
   SQUAT: {
-    name: 'Squat',
-    // Landmark usati (lato sinistro)
+    thresholds: { bottomKnee: 95, topKnee: 160 },
     landmarks: {
-      shoulder: 11,
-      hip: 23,
-      knee: 25,
-      ankle: 27,
-      wrist: 15,
-    },
-    // Soglie per la macchina a stati
-    thresholds: {
-      bottomKnee: 95,      // angolo ginocchio MAX per considerare il fondo valido
-      topKnee: 160,        // angolo ginocchio MIN per considerare la posizione eretta
-      startLock: 165,      // angolo per considerare le ginocchia bloccate in partenza
-      parallelCheck: true, // controlla se l'anca scende sotto il ginocchio
-      wristKneeDist: 0.05, // distanza MAX polso-ginocchio prima di segnalare contatto
-      bounceTolerance: 4,  // gradi di oscillazione prima di segnalare doppio rimbalzo
-    },
-    // Angoli da mostrare nell'HUD
-    display: {
-      primary: 'knee',
-      label: (knee) => `${Math.round(knee)}°`,
-    },
-    // Connessioni scheletro da disegnare
-    connections: [[11, 23], [23, 25], [25, 27], [27, 31]],
-    nodes: [11, 23, 25, 27, 31, 15],
+      LEFT:  { shoulder: 11, hip: 23, knee: 25, ankle: 27 },
+      RIGHT: { shoulder: 12, hip: 24, knee: 26, ankle: 28 }
+    }
   },
-
   DEADLIFT: {
-    name: 'Stacco',
+    thresholds: { erectKnee: 165, erectHip: 165, setupWristY: 0.65, liftThreshold: 0.02, dropThreshold: 0.05 },
     landmarks: {
-      shoulder: 11,
-      hip: 23,
-      knee: 25,
-      ankle: 27,
-      wrist: 15,
-    },
-    thresholds: {
-      erectKnee: 165,       // ginocchio bloccato
-      erectHip: 165,        // anca bloccata (lockout completo)
-      setupWristY: 0.65,    // Y minima del polso per considerare setup a terra
-      liftThreshold: 0.02,  // quanto deve salire il polso per iniziare la fase di trazione
-      hitchTolerance: 0.02, // tolleranza prima di segnalare ramping/hitching
-      dropThreshold: 0.05,  // quanto deve scendere il polso per tornare in setup
-    },
-    display: {
-      primary: 'both',
-      label: (hip, knee) => `H:${Math.round(hip)}° K:${Math.round(knee)}°`,
-    },
-    connections: [[11, 23], [23, 25], [25, 27], [27, 31]],
-    nodes: [11, 23, 25, 27, 31, 15],
+      LEFT:  { shoulder: 11, hip: 23, knee: 25, ankle: 27, wrist: 15 },
+      RIGHT: { shoulder: 12, hip: 24, knee: 26, ankle: 28, wrist: 16 }
+    }
   },
-
   OVERHEAD_PRESS: {
-  name: 'Overhead Press',
-  landmarks: {
-    shoulder: 11,  // spalla sinistra
-    elbow: 13,     // gomito sinistro
-    wrist: 15,     // polso sinistro
-    hip: 23,       // anca sinistra (per iperlordosi)
-  },
-  thresholds: {
-    bottomElbow: 90,   // angolo gomito MAX per considerare bottom valido
-    topElbow: 155,     // angolo gomito MIN per lockout
-    maxTrunkLean: 20,  // gradi MAX inclinazione tronco prima di segnalare iperlordosi
-  },
-  display: {
-    primary: 'elbow',
-    label: (elbow) => `${Math.round(elbow)}°`,
-  },
-  connections: [[11, 13], [13, 15], [11, 23]],
-  nodes: [11, 13, 15, 23],
-},
+    thresholds: { topElbow: 160, bottomElbow: 140, maxTrunkLean: 160 },
+    landmarks: {
+      LEFT:  { shoulder: 11, elbow: 13, wrist: 15, hip: 23 },
+      RIGHT: { shoulder: 12, elbow: 14, wrist: 16, hip: 24 }
+    }
+  }
 };
 
 // Colori scheletro
