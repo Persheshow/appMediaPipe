@@ -1,14 +1,20 @@
 import { useState } from 'react';
 import { usePose } from './hooks/usePose';
 
+const EXERCISE_LABELS = {
+  SQUAT: 'Squat',
+  DEADLIFT: 'Stacco da terra',
+  OVERHEAD_PRESS: 'Pressa militare',
+};
+
 export default function App() {
   const [exercise, setExercise] = useState('SQUAT');
   const [isActive, setIsActive] = useState(false);
   const [cameraSide, setCameraSide] = useState('LEFT');
 
   const { videoRef, canvasRef, isLoading, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset } = usePose(exercise, isActive, cameraSide);
+  const exerciseLabel = EXERCISE_LABELS[exercise];
 
-  // LOGICA ESPORTAZIONE CSV
   const exportCSV = () => {
     const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
     const headers = ['Timestamp', 'Ora', 'Esercizio', 'Lato', 'Esito', 'Angolo primario', 'Angolo secondario', 'Stato finale', 'Errori'];
@@ -22,42 +28,43 @@ export default function App() {
       log.secondaryAngle,
       log.finalState,
       log.errori,
-    ].map(escapeCSV).join(',')).join("\n");
+    ].map(escapeCSV).join(',')).join('\n');
     const csv = `${headers.map(escapeCSV).join(',')}\n${rows}`;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.csv`);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col items-center p-4 font-sans">
       <header className="w-full max-w-md text-center my-4">
         <h1 className="text-2xl font-bold tracking-tight text-indigo-400">Analisi Cinematica</h1>
-        <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">{exercise} • IPF MODE</p>
+        <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">{exerciseLabel} - IPF MODE</p>
       </header>
 
       {!isActive ? (
         <div className="w-full max-w-md flex flex-col gap-8 mt-6">
           <div className="flex flex-col gap-3">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-1">1. Esercizio</h2>
-            {['SQUAT', 'DEADLIFT', 'OVERHEAD_PRESS'].map(ex => (
+            {Object.entries(EXERCISE_LABELS).map(([key, label]) => (
               <button
-                key={ex}
-                onClick={() => setExercise(ex)}
-                className={`py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${exercise === ex ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700 hover:bg-slate-700'}`}
+                key={key}
+                onClick={() => setExercise(key)}
+                className={`py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${exercise === key ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700 hover:bg-slate-700'}`}
               >
-                {ex === 'SQUAT' ? 'Squat' : ex === 'DEADLIFT' ? 'Stacco da terra' : 'Overhead Press'}
+                {label}
               </button>
             ))}
           </div>
 
           <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-1">2. Lato Videocamera</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-1">2. Lato videocamera</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setCameraSide('LEFT')}
@@ -72,17 +79,25 @@ export default function App() {
                 Destra
               </button>
             </div>
-            <p className="text-xs text-slate-500 mt-1 text-center">Indica da quale lato il telefono osserverà il tuo corpo.</p>
+            <p className="text-xs text-slate-500 mt-1 text-center">Indica da quale lato il telefono osserva il tuo corpo.</p>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">3. Setup</h2>
+            <ul className="space-y-2 text-sm text-slate-300">
+              <li>Posiziona il telefono lateralmente rispetto al corpo.</li>
+              <li>Inquadra tutto il corpo, inclusi piedi e mani.</li>
+              <li>Mantieni la camera stabile durante la serie.</li>
+            </ul>
           </div>
 
           <button onClick={() => setIsActive(true)} className="mt-4 w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-xl font-bold text-lg transition-colors text-white">
-            Avvia Analisi
+            Avvia analisi
           </button>
 
-          {/* PULSANTE DOWNLOAD CSV */}
           {sessionLogs.length > 0 && (
             <button onClick={exportCSV} className="mt-2 w-full py-4 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 rounded-xl font-bold text-lg transition-colors text-indigo-400">
-              Esporta Dati Sessione (.CSV)
+              Esporta dati sessione (.CSV)
             </button>
           )}
         </div>
@@ -90,28 +105,28 @@ export default function App() {
         <div className="w-full max-w-md flex flex-col items-center">
           <section className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 flex justify-around mb-4 shadow-lg">
             <div className="text-center">
-              <p className="text-xs uppercase tracking-wider text-slate-400">Rep Valide</p>
+              <p className="text-xs uppercase tracking-wider text-slate-400">Rep valide</p>
               <p className="text-3xl font-black text-emerald-400 mt-1">{validReps}</p>
             </div>
             <div className="w-px bg-slate-800 self-stretch" />
             <div className="text-center">
-              <p className="text-xs uppercase tracking-wider text-slate-400">No-Rep</p>
+              <p className="text-xs uppercase tracking-wider text-slate-400">No-rep</p>
               <p className="text-3xl font-black text-rose-500 mt-1">{noReps}</p>
             </div>
             <div className="w-px bg-slate-800 self-stretch" />
             <div className="text-center flex items-center justify-center">
-              <p className="text-sm font-mono text-slate-300">
-                {exercise === 'SQUAT' && (`K: ${angles.primary ? Math.round(angles.primary) : '--'}°`)}
-                {exercise === 'DEADLIFT' && (`H: ${angles.primary ? Math.round(angles.primary) : '--'}°\nK: ${angles.secondary ? Math.round(angles.secondary) : '--'}°`)}
-                {exercise === 'OVERHEAD_PRESS' && (`E: ${angles.primary ? Math.round(angles.primary) : '--'}°\nT: ${angles.secondary ? Math.round(angles.secondary) : '--'}°`)}
+              <p className="text-sm font-mono text-slate-300 whitespace-pre-line">
+                {exercise === 'SQUAT' && (`K: ${angles.primary ? Math.round(angles.primary) : '--'} deg`)}
+                {exercise === 'DEADLIFT' && (`H: ${angles.primary ? Math.round(angles.primary) : '--'} deg\nK: ${angles.secondary ? Math.round(angles.secondary) : '--'} deg`)}
+                {exercise === 'OVERHEAD_PRESS' && (`E: ${angles.primary ? Math.round(angles.primary) : '--'} deg\nT: ${angles.secondary ? Math.round(angles.secondary) : '--'} deg`)}
               </p>
             </div>
           </section>
 
           {faults.length > 0 && (
             <div className="w-full mb-4 bg-rose-950/50 border border-rose-800 rounded-xl p-3 text-center shadow-lg">
-              <p className="text-xs font-bold uppercase tracking-wider text-rose-400 mb-1">Motivo No-Rep</p>
-              <p className="text-sm font-medium text-rose-200">{faults.join(' · ')}</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-rose-400 mb-1">Motivo no-rep</p>
+              <p className="text-sm font-medium text-rose-200">{faults.join(' - ')}</p>
             </div>
           )}
 
@@ -130,12 +145,35 @@ export default function App() {
 
           <footer className="w-full mt-4 flex gap-2">
             <button onClick={() => setIsActive(false)} className="flex-1 py-3 bg-rose-950 hover:bg-rose-900 border border-rose-900 rounded-xl font-medium text-sm text-rose-400">
-              Ferma e Cambia
+              Ferma e cambia
             </button>
             <button onClick={reset} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl font-medium text-sm text-slate-300">
               Azzera
             </button>
           </footer>
+
+          {sessionLogs.length > 0 && (
+            <section className="w-full mt-4 rounded-xl border border-slate-800 bg-slate-900 p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Ultime ripetizioni</h2>
+                <button onClick={exportCSV} className="text-xs font-semibold text-indigo-300 hover:text-indigo-200">
+                  CSV
+                </button>
+              </div>
+              <ol className="space-y-2">
+                {sessionLogs.slice(-5).reverse().map((log, index) => (
+                  <li key={`${log.timestamp}-${index}`} className="flex items-start justify-between gap-3 text-sm">
+                    <span className={log.esito === 'VALID_REP' ? 'text-emerald-300' : 'text-rose-300'}>
+                      {log.esito === 'VALID_REP' ? 'Valida' : 'No-rep'}
+                    </span>
+                    <span className="text-right text-slate-400">
+                      {log.errori === 'Nessuno' ? log.time : `${log.time} - ${log.errori}`}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
         </div>
       )}
     </div>

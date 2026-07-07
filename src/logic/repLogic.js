@@ -1,4 +1,4 @@
-import { EXERCISES, SMOOTHING } from '../config/exercises';
+import { EXERCISES, SMOOTHING } from '../config/exercises.js';
 
 // ── SMOOTHING ──────────────────────────────────────────────────────────────────
 export function smoothAngle(prev, current) {
@@ -36,6 +36,8 @@ export function createInitialState() {
       lockedAtStart: false,
       deepEnough: false,
       minWristY: 1.0,
+      maxWristYDuringLift: null,
+      startKneeAngle: null,
     },
   };
 }
@@ -152,9 +154,24 @@ export function processDeadlift(state, landmarks, side) {
     if (!isErect && wristY > cfg.setupWristY) { state.movementState = 'SETUP'; m.minWristY = wristY; }
   } else if (state.movementState === 'SETUP') {
     m.minWristY = Math.max(m.minWristY, wristY);
-    if (wristY < m.minWristY - cfg.liftThreshold) { state.movementState = 'LIFTING'; state.lastAngleHistory = []; }
+    if (wristY < m.minWristY - cfg.liftThreshold) {
+      state.movementState = 'LIFTING';
+      m.maxWristYDuringLift = wristY;
+      state.lastAngleHistory = [];
+    }
   } else if (state.movementState === 'LIFTING') {
-    if (isErect) { event = { type: 'VALID_REP', faults: [] }; state.movementState = 'LOCKED'; }
+    if (m.maxWristYDuringLift !== null && wristY > m.maxWristYDuringLift + cfg.maxWristDropDuringLift) {
+      event = { type: 'NO_REP', faults: ['Discesa del bilanciere durante la tirata'] };
+      const newState = createInitialState();
+      newState.lastActiveTime = Date.now();
+      return { state: newState, event, primaryAngle: hipAngle, secondaryAngle: kneeAngle, isTarget: false };
+    }
+    m.maxWristYDuringLift = Math.min(m.maxWristYDuringLift ?? wristY, wristY);
+    if (isErect) {
+      event = { type: 'VALID_REP', faults: [] };
+      state.movementState = 'LOCKED';
+      m.maxWristYDuringLift = null;
+    }
   } else if (state.movementState === 'LOCKED') {
     if (!isErect && wristY > m.minWristY + cfg.dropThreshold) state.movementState = 'DROPPING';
   }
@@ -166,11 +183,13 @@ export function processDeadlift(state, landmarks, side) {
 // ── LOGICA OVERHEAD PRESS ──────────────────────────────────────────────────────
 export function processOverheadPress(state, landmarks, side) {
   const cfg = EXERCISES.OVERHEAD_PRESS.thresholds;
-  const { shoulder, elbow, wrist, hip } = EXERCISES.OVERHEAD_PRESS.landmarks[side];
+  const { shoulder, elbow, wrist, hip, knee, ankle } = EXERCISES.OVERHEAD_PRESS.landmarks[side];
   const lm = landmarks;
 
   // GESTIONE OCCLUSIONE VISIVA
-  const isVisible = lm[shoulder] && lm[elbow] && lm[wrist] && lm[shoulder].visibility > 0.4 && lm[elbow].visibility > 0.4 && lm[wrist].visibility > 0.4;
+  const isVisible = lm[shoulder] && lm[elbow] && lm[wrist] && lm[hip] && lm[knee] && lm[ankle]
+    && lm[shoulder].visibility > 0.4 && lm[elbow].visibility > 0.4 && lm[wrist].visibility > 0.4
+    && lm[hip].visibility > 0.4 && lm[knee].visibility > 0.4 && lm[ankle].visibility > 0.4;
   if (!isVisible) {
     if (!state.occludedSince) {
       state.occludedSince = Date.now();
@@ -186,17 +205,20 @@ export function processOverheadPress(state, landmarks, side) {
   checkTimeout(state);
 
   const rawElbow = calculateAngle(lm[shoulder], lm[elbow], lm[wrist]);
+  const rawKnee = calculateAngle(lm[hip], lm[knee], lm[ankle]);
   state.smoothedPrimary = smoothAngle(state.smoothedPrimary, rawElbow);
   const elbowAngle = state.smoothedPrimary;
-  const vertical = { x: lm[shoulder].x, y: lm[shoulder].y - 0.1, z: lm[shoulder].z || 0 };
+  const vertical = { x: lm[shoulder].x, y: lm[shoulder].y + 0.1, z: lm[shoulder].z || 0 };
   const rawTrunk = calculateAngle(vertical, lm[shoulder], lm[hip]);
   state.smoothedSecondary = smoothAngle(state.smoothedSecondary, rawTrunk);
   const trunkAngle = state.smoothedSecondary;
   const m = state.metrics;
+  const kneeBend = m.startKneeAngle === null ? 0 : m.startKneeAngle - rawKnee;
   let event = null;
 
   if (state.movementState === 'STANDING') {
     if (elbowAngle > cfg.topElbow) m.lockedAtStart = true;
+    if (m.startKneeAngle === null || elbowAngle > cfg.topElbow) m.startKneeAngle = rawKnee;
     if (elbowAngle < 140) {
       state.movementState = 'DESCENDING';
       m.deepEnough = false;
@@ -206,15 +228,18 @@ export function processOverheadPress(state, landmarks, side) {
   } else if (state.movementState === 'DESCENDING') {
     if (elbowAngle < cfg.bottomElbow) m.deepEnough = true;
     if (trunkAngle > cfg.maxTrunkLean) m.faults.add('Iperlordosi lombare');
+    if (kneeBend > cfg.maxKneeBend) m.faults.add('Uso delle gambe');
     if (checkAscent(state, elbowAngle)) state.movementState = 'ASCENDING';
   } else if (state.movementState === 'ASCENDING') {
     if (trunkAngle > cfg.maxTrunkLean) m.faults.add('Iperlordosi lombare');
+    if (kneeBend > cfg.maxKneeBend) m.faults.add('Uso delle gambe');
     if (elbowAngle > cfg.topElbow) {
       if (!m.deepEnough) m.faults.add('Range di movimento incompleto');
       event = m.faults.size === 0 ? { type: 'VALID_REP', faults: [] } : { type: 'NO_REP', faults: Array.from(m.faults) };
       state.movementState = 'STANDING';
       m.deepEnough = false;
       m.faults = new Set();
+      m.startKneeAngle = rawKnee;
       state.lastAngleHistory = [];
     }
   }

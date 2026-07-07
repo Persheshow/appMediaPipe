@@ -206,7 +206,7 @@ export function usePose(exercise, isActive, cameraSide) {
         } else {
           noLandmarkFrames.current++;
           if (noLandmarkFrames.current > 30 && !isLoadingRef.current) {
-            setIsLoading(true); setLoadingMsg('Corpo non rilevato — inquadra tutto il corpo'); isLoadingRef.current = true;
+            setIsLoading(true); setLoadingMsg('Corpo non rilevato - inquadra tutto il corpo'); isLoadingRef.current = true;
           }
         }
       }
