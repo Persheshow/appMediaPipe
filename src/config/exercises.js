@@ -1,6 +1,6 @@
 export const EXERCISES = {
   SQUAT: {
-    thresholds: { bottomKnee: 95, topKnee: 160 },
+    thresholds: { bottomKnee: 105, topKnee: 160 },
     landmarks: {
       LEFT:  { shoulder: 11, hip: 23, knee: 25, ankle: 27 },
       RIGHT: { shoulder: 12, hip: 24, knee: 26, ankle: 28 }
@@ -14,7 +14,7 @@ export const EXERCISES = {
     }
   },
   OVERHEAD_PRESS: {
-    thresholds: { topElbow: 160, bottomElbow: 140, maxTrunkLean: 160 },
+    thresholds: { topElbow: 160, bottomElbow: 140, maxTrunkLean: 20 },
     landmarks: {
       LEFT:  { shoulder: 11, elbow: 13, wrist: 15, hip: 23 },
       RIGHT: { shoulder: 12, elbow: 14, wrist: 16, hip: 24 }
