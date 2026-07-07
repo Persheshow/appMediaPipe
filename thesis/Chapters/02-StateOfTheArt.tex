@@ -1,0 +1,63 @@
+% !TEX root = ../Thesis.tex
+
+\chapter{Stato dell'arte}
+\label{ch:state}
+
+Questo capitolo introduce i concetti necessari alla realizzazione del sistema: machine learning, deep learning, reti convoluzionali, pose estimation, biomeccanica di base e tecnologie web per l'esecuzione client-side. L'obiettivo non e' fornire una trattazione completa di ciascun ambito, ma collocare il progetto nel contesto tecnico e scientifico corretto.
+
+\section{Machine learning e deep learning}
+
+Il machine learning studia algoritmi capaci di migliorare le proprie prestazioni a partire dai dati. In una classificazione generale, i sistemi di apprendimento possono essere supervisionati, non supervisionati, semi-supervisionati o per rinforzo; possono inoltre apprendere in modalita' batch oppure online, e costruire modelli espliciti o basarsi su istanze osservate \cite{geron2019hands}. Nel contesto della computer vision moderna, l'approccio piu' rilevante e' il deep learning, che utilizza reti neurali profonde per apprendere rappresentazioni gerarchiche dei dati \cite{goodfellow2016deep,lecun2015deep}.
+
+La differenza centrale tra un approccio tradizionale e uno basato su deep learning riguarda la rappresentazione delle feature. Nei sistemi classici, molte caratteristiche visive venivano progettate manualmente; nelle reti neurali profonde, invece, i livelli intermedi apprendono rappresentazioni progressivamente piu' astratte. Questo ha permesso progressi notevoli in compiti come classificazione di immagini, object detection e stima della posa \cite{krizhevsky2012imagenet,he2016resnet}.
+
+Il libro di Geron, adottato come riferimento principale per lo studio del machine learning, sottolinea l'importanza di distinguere tra problema, dati, modello, funzione di costo, metrica di valutazione e processo di validazione \cite{geron2019hands}. Anche se il presente progetto non addestra un nuovo modello, questi concetti restano importanti: il sistema utilizza un modello gia' addestrato per la percezione, ma definisce a valle una pipeline decisionale che deve essere valutata rispetto a casi attesi e metriche misurabili.
+
+\section{Reti neurali convoluzionali}
+
+Le reti neurali convoluzionali, o CNN, sono una famiglia di architetture particolarmente adatta all'elaborazione di immagini. Il loro successo deriva dall'uso di filtri locali condivisi, che riducono il numero di parametri e sfruttano la struttura spaziale dell'immagine. Architetture come AlexNet hanno mostrato il potenziale delle CNN su dataset di grandi dimensioni \cite{krizhevsky2012imagenet}; successivamente, tecniche come connessioni residue hanno reso possibile addestrare reti molto piu' profonde \cite{he2016resnet}.
+
+Per applicazioni mobili e real-time, tuttavia, non e' sufficiente massimizzare l'accuratezza: occorre considerare latenza, consumo energetico e memoria. Architetture efficienti come MobileNet e MobileNetV2 utilizzano convoluzioni separabili in profondita' e blocchi residuali invertiti per ridurre il costo computazionale \cite{howard2017mobilenets,sandler2018mobilenetv2}. Questa linea di ricerca e' rilevante per sistemi come MediaPipe, che devono eseguire inferenza su dispositivi consumer con vincoli severi \cite{bazarevsky2020blazepose,lugaresi2019mediapipe}.
+
+\section{Pose estimation}
+
+La stima della posa umana consiste nell'individuare punti anatomici significativi, detti landmark o keypoint, a partire da immagini o video. I landmark possono rappresentare articolazioni, segmenti corporei o punti di riferimento come spalle, anche, ginocchia e caviglie. A seconda del modello, l'output puo' essere espresso in coordinate immagine normalizzate o in coordinate tridimensionali stimate \cite{mediapipePoseWeb2026}.
+
+MediaPipe Pose Landmarker restituisce 33 landmark corporei per ogni posa rilevata, includendo coordinate normalizzate, profondita' stimata e valori di visibilita' \cite{mediapipePoseWeb2026,mediapipePoseOverview2026}. BlazePose e le sue evoluzioni sono state progettate per il tracciamento in tempo reale su dispositivo, bilanciando accuratezza e velocita' \cite{bazarevsky2020blazepose,grishchenko2022blazepose}. Questo rende tali modelli adatti ad applicazioni interattive come fitness tracking, gesture analysis e realta' aumentata.
+
+La scelta di utilizzare pose estimation monoculare comporta vantaggi e limiti. Il vantaggio principale e' l'accessibilita': una sola fotocamera e' sufficiente. Il limite principale e' l'ambiguita' tridimensionale: profondita', occlusioni e rotazioni fuori piano possono alterare la posizione stimata dei landmark. Per questo motivo il sistema proposto assume una inquadratura laterale e limita le regole a parametri osservabili con ragionevole affidabilita'.
+
+\section{Analisi cinematica del movimento}
+
+L'analisi cinematica descrive il movimento senza considerare direttamente le forze che lo producono. Nel caso degli esercizi di forza, grandezze come angoli articolari, traiettorie e fasi temporali sono sufficienti per descrivere molte caratteristiche tecniche \cite{winter2009biomechanics,zatsiorsky2002kinetics}. La scelta dei segmenti corporei e dei punti articolari deriva dalla tradizione biomeccanica e antropometrica, in cui il corpo e' modellato come insieme di segmenti collegati \cite{dempster1955space}. A partire dai landmark stimati, e' possibile calcolare angoli tra tre punti, ad esempio anca-ginocchio-caviglia per l'angolo del ginocchio oppure spalla-anca-ginocchio per l'angolo dell'anca.
+
+Nel prototipo sviluppato, gli angoli sono calcolati tramite prodotto scalare tra vettori. Dati tre landmark $a$, $b$, $c$, l'angolo nel punto $b$ e':
+
+\begin{equation}
+\theta = \arccos \left(
+\frac{(a-b) \cdot (c-b)}
+{\|a-b\| \|c-b\|}
+\right).
+\end{equation}
+
+Questa formula e' semplice, interpretabile e indipendente dal modello specifico di pose estimation. Gli angoli grezzi vengono poi smussati con una media esponenziale per ridurre oscillazioni frame-by-frame:
+
+\begin{equation}
+\theta_t^{smooth} = \alpha \theta_t + (1-\alpha)\theta_{t-1}^{smooth}.
+\end{equation}
+
+La scelta di soglie fisse rende il sistema comprensibile, ma introduce limiti: utenti con proporzioni corporee diverse o inquadrature differenti possono richiedere calibrazione. Una possibile evoluzione consiste nell'adattare le soglie alla posizione iniziale dell'utente, come discusso nel Capitolo~\ref{ch:conclusions}.
+
+\section{Regole tecniche degli esercizi}
+
+Le regole ufficiali del powerlifting stabiliscono criteri di validita' per alzate come squat e deadlift. Nel caso dello squat, tra le condizioni rilevanti vi sono il raggiungimento della profondita' richiesta e il completamento dell'alzata in posizione eretta. Nel deadlift sono rilevanti l'estensione completa di ginocchia e anche, l'assenza di movimento discendente del bilanciere prima del lockout e il controllo nella fase finale \cite{ipfRules2024}.
+
+La pressa militare non e' inclusa nelle prove ufficiali del powerlifting moderno, ma rimane un esercizio significativo per l'analisi tecnica. Una ripetizione stretta richiede di spingere il carico sopra la testa senza trasformare il movimento in push press; per questo motivo il prototipo monitora la flessione del ginocchio e l'inclinazione del tronco.
+
+Il sistema non pretende di implementare tutte le regole ufficiali. Alcune condizioni, come spostamento dei piedi, contatto con attrezzatura o giudizio arbitrale sui comandi, richiedono informazioni non sempre osservabili da una singola camera laterale. La tesi adotta quindi un criterio pragmatico: implementare solo regole osservabili dai landmark disponibili e dichiarare esplicitamente i limiti.
+
+\section{Tecnologie web}
+
+L'applicazione e' realizzata come web app mobile-first. React fornisce un modello dichiarativo basato su componenti e hook per gestire stato e side effects \cite{reactDocs2026}. Vite e' utilizzato come ambiente di sviluppo e sistema di build, mentre il plugin PWA permette di generare service worker e manifest per una esperienza installabile \cite{viteDocs2026,vitePwaDocs2026,mdnPwa2026}.
+
+L'accesso alla fotocamera avviene tramite l'API \texttt{navigator.mediaDevices.getUserMedia}, che richiede un contesto sicuro e il consenso dell'utente \cite{mdnGetUserMedia2026}. La scelta di eseguire inferenza nel browser ha implicazioni importanti: riduce il trasferimento di dati sensibili verso server esterni, migliora la reattivita' percepita e rende l'applicazione utilizzabile in scenari a connettivita' limitata. Al tempo stesso, impone attenzione alle prestazioni, poiche' l'inferenza video puo' bloccare il thread principale se non gestita con cura \cite{mediapipePoseWeb2026}.

@@ -1,0 +1,108 @@
+% !TEX root = ../Thesis.tex
+
+\chapter{Valutazione}
+\label{ch:evaluation}
+
+La valutazione del prototipo e' stata affrontata su due livelli. Il primo riguarda la verifica automatica della logica decisionale tramite test sintetici. Il secondo riguarda la metodologia proposta per una validazione sperimentale su video reali, necessaria per stimare accuratezza e robustezza in condizioni d'uso effettive.
+
+\section{Test automatici}
+
+La logica rep/no-rep e' contenuta in un modulo indipendente dall'interfaccia e dalla fotocamera. Questa scelta ha permesso di scrivere test automatici con il runner nativo di Node.js. I test generano landmark sintetici e simulano sequenze temporali di movimento.
+
+\begin{table}[htbp]
+\myfloatalign
+\begin{tabular}{lll}
+\toprule
+Caso & Input sintetico & Esito atteso \\
+\midrule
+Squat valido & discesa sotto soglia e ritorno in estensione & VALID\_REP \\
+Squat incompleto & ritorno in estensione senza profondita' & NO\_REP \\
+Deadlift valido & anca e ginocchio in lockout & VALID\_REP \\
+Deadlift con discesa & polso scende durante la tirata & NO\_REP \\
+Pressa valida & gomito scende e torna in estensione & VALID\_REP \\
+Pressa con gambe & ginocchio si flette durante la spinta & NO\_REP \\
+Tracking perso & landmark invisibili durante una ripetizione & NO\_REP \\
+\bottomrule
+\end{tabular}
+\caption{Casi coperti dai test automatici della logica decisionale.}
+\label{tab:tests}
+\end{table}
+
+I test non dimostrano l'accuratezza del sistema nel mondo reale, ma verificano che la logica implementata rispetti le regole attese in condizioni controllate. Questo tipo di test e' utile per evitare regressioni: modificando soglie o state machine, eventuali comportamenti inattesi emergono immediatamente.
+
+\section{Verifica software}
+
+Oltre ai test logici, il progetto e' stato verificato con:
+
+\begin{itemize}
+  \item \texttt{npm test}, per eseguire i test automatici;
+  \item \texttt{npm run lint}, per controllare errori statici e regole React;
+  \item \texttt{npm run build}, per verificare la build di produzione e la generazione PWA.
+\end{itemize}
+
+La build include le risorse locali di MediaPipe e genera service worker e manifest. Il lint esclude i file WASM/JavaScript generati da MediaPipe, poiche' non sono codice sorgente del progetto.
+
+\section{Protocollo sperimentale proposto}
+
+Per una valutazione completa su dati reali e' necessario raccogliere un insieme di video o sessioni controllate. Il protocollo suggerito e':
+
+\begin{enumerate}
+  \item registrare un numero bilanciato di ripetizioni valide e non valide per ciascun esercizio;
+  \item annotare manualmente l'esito atteso di ogni ripetizione;
+  \item eseguire l'applicazione sui video o durante le sessioni;
+  \item esportare i CSV prodotti;
+  \item confrontare esito atteso ed esito rilevato;
+  \item calcolare metriche di accuratezza, precisione, recall e matrice di confusione.
+\end{enumerate}
+
+La matrice di confusione e' particolarmente utile per distinguere falsi positivi e falsi negativi. Nel contesto di questo progetto:
+
+\begin{itemize}
+  \item un falso positivo e' una no-rep reale classificata come valida;
+  \item un falso negativo e' una rep valida classificata come no-rep.
+\end{itemize}
+
+Dal punto di vista applicativo, i falsi positivi sono piu' critici se il sistema viene usato come giudice automatico, mentre i falsi negativi possono essere piu' accettabili in un contesto di allenamento, dove un feedback conservativo puo' invitare l'utente a ripetere meglio il gesto.
+
+\section{Metriche}
+
+Sia $TP$ il numero di ripetizioni valide correttamente riconosciute, $TN$ il numero di no-rep correttamente riconosciute, $FP$ il numero di no-rep classificate come valide e $FN$ il numero di rep valide classificate come no-rep. Le metriche principali sono:
+
+\begin{equation}
+Accuracy = \frac{TP + TN}{TP + TN + FP + FN}
+\end{equation}
+
+\begin{equation}
+Precision = \frac{TP}{TP + FP}
+\end{equation}
+
+\begin{equation}
+Recall = \frac{TP}{TP + FN}
+\end{equation}
+
+\begin{equation}
+F1 = 2 \cdot \frac{Precision \cdot Recall}{Precision + Recall}
+\end{equation}
+
+Queste metriche sono comuni nella valutazione di classificatori \cite{geron2019hands}. Nel caso specifico, possono essere calcolate per ciascun esercizio e poi aggregate.
+
+\section{Limiti osservati}
+
+Il sistema presenta alcuni limiti intrinseci:
+
+\begin{itemize}
+  \item \textbf{Monocamera}: una sola inquadratura laterale non consente di osservare in modo affidabile movimenti fuori piano.
+  \item \textbf{Occlusioni}: mani, bilanciere o arti possono nascondere landmark rilevanti.
+  \item \textbf{Soglie fisse}: utenti diversi possono richiedere soglie diverse.
+  \item \textbf{Proxy del bilanciere}: nel deadlift il polso e' usato come approssimazione della traiettoria del bilanciere.
+  \item \textbf{Assenza di calibrazione}: il sistema non adatta automaticamente le soglie alla corporatura dell'utente.
+  \item \textbf{Assenza di validazione clinica o sportiva}: il prototipo non e' certificato come strumento di giudizio ufficiale.
+\end{itemize}
+
+Questi limiti non invalidano il prototipo, ma ne definiscono il perimetro. L'applicazione e' piu' adatta come strumento di supporto, didattica e raccolta dati preliminare che come arbitro automatico.
+
+\section{Discussione}
+
+La scelta di combinare pose estimation e regole esplicite presenta vantaggi rispetto a un classificatore end-to-end. In primo luogo, le decisioni sono interpretabili: una no-rep e' associata a una condizione geometrica. In secondo luogo, il sistema richiede meno dati, poiche' non addestra un modello supervisionato sulle ripetizioni. In terzo luogo, la logica puo' essere modificata facilmente in base a nuove regole o soglie.
+
+Lo svantaggio e' che le soglie devono essere progettate manualmente e possono non generalizzare a tutti gli utenti. Un classificatore addestrato su un dataset ampio potrebbe apprendere pattern piu' complessi, ma richiederebbe raccolta dati, annotazione, training, validazione e gestione dell'overfitting \cite{geron2019hands,goodfellow2016deep}. Per un prototipo di tesi triennale, la soluzione ibrida adottata rappresenta un compromesso ragionevole tra fattibilita', spiegabilita' e utilita'.

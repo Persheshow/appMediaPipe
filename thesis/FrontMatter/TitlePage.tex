@@ -1,0 +1,57 @@
+%--------------------------------------------------------------
+% TitlePage.tex
+%--------------------------------------------------------------
+\newcommand{\myFaculty}{Scuola di Scienze Matematiche, Fisiche e Naturali\xspace}
+\newcommand{\myUni}{\protect{Universita degli Studi di Firenze}\xspace}
+
+\begin{titlepage}
+	\begin{center}
+   	\large
+      \hfill
+      \vfill
+      \begingroup
+         \includegraphics[scale=0.15]{logo/LOGO}\\
+			\myFaculty \\
+			\myDegree \\
+			\vspace{0.5cm}
+         \vspace{0.5cm}
+         Tesi di Laurea
+         \vspace{0.5cm}
+      \endgroup
+      \vfill
+      \begingroup
+      	\color{Maroon}\spacedallcaps{\myItalianTitle} \\ $\ $\\
+      	\spacedallcaps{\myEnglishTitle} \\
+	\bigskip
+	\bigskip
+      \endgroup
+      \spacedlowsmallcaps{\myName}
+      \vfill
+      \vfill
+      \mySupervisorTitle: \mySupervisorName\\
+      \vfill
+      \ifx\myCoSupervisorTitle\undefined
+      \else
+	 \myCoSupervisorTitle: \myCoSupervisorName\\
+      \fi
+	\bigskip
+	\bigskip
+      \vfill
+      \vfill
+      \vfill
+      \vfill
+      \vfill
+      \vfill
+      \vfill
+      \vfill
+      \myTime
+	\end{center}
+\end{titlepage}
+
+\newpage
+\thispagestyle{empty}
+\hfill
+\vfill
+\noindent\myName:
+\textit{\myItalianTitle,}
+\myDegree, \textcopyright\ \myTime

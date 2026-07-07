@@ -1,0 +1,46 @@
+% !TEX root = ../Thesis.tex
+
+\chapter{Conclusioni e sviluppi futuri}
+\label{ch:conclusions}
+
+La tesi ha presentato la progettazione e realizzazione di una web app mobile-first per l'analisi cinematica in tempo reale di esercizi di forza. Il sistema integra MediaPipe Pose Landmarker nel browser, calcola angoli articolari dai landmark stimati e applica macchine a stati per classificare le ripetizioni di squat, deadlift e pressa militare.
+
+\section{Risultati}
+
+Il prototipo realizzato soddisfa gli obiettivi principali definiti in fase progettuale. L'applicazione consente di:
+
+\begin{itemize}
+  \item avviare una sessione da smartphone o browser desktop;
+  \item selezionare esercizio e lato camera;
+  \item visualizzare video e scheletro stimato;
+  \item contare ripetizioni valide e non valide;
+  \item segnalare motivi specifici di no-rep;
+  \item esportare un CSV della sessione;
+  \item eseguire test automatici della logica decisionale.
+\end{itemize}
+
+Dal punto di vista tecnico, il lavoro mostra come un modello di pose estimation gia' addestrato possa essere usato come componente percettivo all'interno di una pipeline piu' ampia. La parte di machine learning non e' trattata come scatola magica: viene collocata nel contesto delle CNN e della pose estimation, mentre la decisione finale viene resa esplicita tramite regole interpretabili \cite{geron2019hands,bazarevsky2020blazepose,mediapipePoseWeb2026}.
+
+\section{Limiti}
+
+I limiti principali riguardano l'uso di una singola camera, la dipendenza dalla qualita' del tracking e l'assenza di calibrazione automatica. Inoltre, alcune regole tecniche ufficiali non sono implementate: spostamento dei piedi, doppio rimbalzo, contatto con il bilanciere o valutazione completa di hitching e ramping richiedono informazioni non sempre accessibili dai soli landmark corporei.
+
+Un altro limite e' l'assenza di una valutazione quantitativa su un dataset reale di video annotati. I test automatici verificano la coerenza interna della logica, ma non misurano l'accuratezza della pose estimation in palestra, con luci variabili, abbigliamento diverso, occlusioni o angoli di ripresa non ideali.
+
+\section{Sviluppi futuri}
+
+Gli sviluppi futuri piu' rilevanti sono:
+
+\begin{itemize}
+  \item \textbf{Calibrazione utente}: registrare la posizione iniziale e adattare le soglie alla corporatura e all'inquadratura.
+  \item \textbf{Dataset sperimentale}: raccogliere video annotati e calcolare metriche quantitative.
+  \item \textbf{Rilevamento del bilanciere}: integrare object detection o marker visivi per osservare direttamente la traiettoria del carico.
+  \item \textbf{Analisi bilaterale}: usare entrambi i lati del corpo quando visibili, confrontando simmetria e stabilita'.
+  \item \textbf{Web worker}: spostare inferenza e logica pesante fuori dal thread principale, come suggerito dalla documentazione MediaPipe per evitare blocchi dell'interfaccia \cite{mediapipePoseWeb2026}.
+  \item \textbf{Classificatore supervisionato}: usare i dati raccolti per addestrare un modello in grado di classificare ripetizioni valide e non valide, confrontandolo con l'approccio rule-based \cite{geron2019hands,goodfellow2016deep}.
+  \item \textbf{Feedback temporale}: mostrare grafici di angoli e fasi del movimento dopo ogni serie.
+\end{itemize}
+
+\section{Considerazione finale}
+
+Il risultato ottenuto dimostra che tecnologie web moderne, modelli di pose estimation e regole cinematiche semplici possono essere combinate per realizzare strumenti pratici di supporto all'allenamento. La forza del prototipo non sta nel sostituire il giudizio umano, ma nel rendere osservabili e registrabili alcuni aspetti del movimento. In questo senso, l'applicazione rappresenta una base concreta per ulteriori sperimentazioni su computer vision applicata allo sport.

@@ -1,0 +1,53 @@
+% !TEX root = ../Thesis.tex
+
+\chapter{Introduzione}
+
+Negli ultimi anni la diffusione di dispositivi mobili dotati di fotocamera, GPU integrate e browser sempre piu' maturi ha reso possibile spostare nel client una parte significativa di elaborazioni che in passato richiedevano hardware dedicato o servizi remoti. Questo cambiamento e' particolarmente rilevante nel contesto dell'analisi del movimento, dove la possibilita' di stimare la posa umana in tempo reale a partire da un singolo flusso video permette di costruire strumenti leggeri, accessibili e utilizzabili anche al di fuori di laboratori biomeccanici. Framework come MediaPipe, insieme a modelli progettati per l'inferenza on-device, hanno reso praticabile l'uso di reti neurali convoluzionali e modelli di stima della posa in applicazioni web interattive \cite{lugaresi2019mediapipe,bazarevsky2020blazepose,grishchenko2022blazepose,mediapipePoseWeb2026}.
+
+Il presente lavoro si colloca in questo scenario e propone una web app mobile-first per l'analisi cinematica di esercizi di forza. L'applicazione utilizza MediaPipe Pose Landmarker per estrarre landmark corporei dal video della fotocamera e applica una logica deterministica a stati per classificare le ripetizioni come valide o non valide. Gli esercizi considerati sono squat, deadlift e pressa militare. Per ciascun esercizio vengono monitorati angoli articolari e relazioni geometriche tra landmark, con l'obiettivo di riconoscere le fasi principali del movimento e segnalare alcune violazioni tecniche osservabili da una singola inquadratura laterale.
+
+\section{Motivazione}
+
+Nel powerlifting e nell'allenamento della forza, la valutazione della tecnica e' spesso demandata all'osservazione di un allenatore o di un giudice. Tale osservazione e' efficace, ma non sempre disponibile; inoltre, nelle sessioni individuali l'atleta puo' non avere un feedback immediato e oggettivabile sulla qualita' delle ripetizioni. Le regole tecniche ufficiali dello squat e dello stacco, ad esempio, richiedono condizioni come profondita' sufficiente, estensione completa e assenza di movimenti discendenti prima del completamento dell'alzata \cite{ipfRules2024}. Anche nella pressa militare, pur non essendo una prova del powerlifting moderno, l'interesse tecnico e' analogo: distinguere una pressa stretta da una ripetizione assistita dalle gambe richiede attenzione alla flessione del ginocchio e alla stabilita' del tronco.
+
+Un sistema automatico basato su computer vision non sostituisce un giudice ufficiale o un allenatore. Tuttavia, puo' offrire un supporto quantitativo: conteggio delle ripetizioni, identificazione di errori ricorrenti, esportazione di dati e possibilita' di confrontare sessioni diverse. In particolare, una soluzione web mobile-first riduce la barriera di accesso: non richiede installazione nativa, puo' essere eseguita su smartphone e sfrutta API standard del browser come \texttt{getUserMedia} per accedere alla fotocamera \cite{mdnGetUserMedia2026,mdnPwa2026}.
+
+\section{Obiettivo della tesi}
+
+L'obiettivo della tesi e' progettare e realizzare un prototipo funzionante di applicazione web per:
+
+\begin{itemize}
+  \item acquisire in tempo reale un flusso video dalla fotocamera del dispositivo;
+  \item stimare la posa umana tramite MediaPipe Pose Landmarker;
+  \item calcolare angoli articolari rilevanti per squat, deadlift e pressa militare;
+  \item riconoscere le fasi del movimento tramite macchine a stati finite;
+  \item contare ripetizioni valide e non valide;
+  \item fornire feedback sintetico sul motivo della non validita';
+  \item esportare i dati della sessione in formato CSV;
+  \item documentare limiti, scelte progettuali e possibili estensioni.
+\end{itemize}
+
+La tesi non mira ad addestrare un nuovo modello di deep learning. Il modello di pose estimation e' fornito da MediaPipe; il contributo principale e' l'integrazione di tale modello in una web app e la costruzione di una logica cinematica interpretabile. Questa scelta e' coerente con un approccio pragmatico: il machine learning fornisce la percezione di basso livello, mentre l'analisi biomeccanica e le regole degli esercizi vengono espresse in modo esplicito, verificabile e modificabile \cite{geron2019hands,goodfellow2016deep,winter2009biomechanics}.
+
+\section{Metodologia}
+
+La metodologia seguita combina studio teorico, progettazione software e valutazione sperimentale preliminare. In primo luogo sono stati analizzati i concetti di machine learning, deep learning e reti convoluzionali necessari a comprendere il funzionamento generale dei sistemi di visione artificiale \cite{geron2019hands,lecun2015deep,krizhevsky2012imagenet}. Successivamente sono stati studiati i sistemi di pose estimation real-time, con particolare attenzione a BlazePose e MediaPipe \cite{bazarevsky2020blazepose,grishchenko2022blazepose,lugaresi2019mediapipe}.
+
+Dal punto di vista implementativo, l'applicazione e' stata sviluppata con React, Vite e Tailwind CSS. La logica di acquisizione video e inferenza e' stata isolata in un hook React, mentre la classificazione delle ripetizioni e' stata separata in un modulo indipendente. Questa separazione permette di testare la logica rep/no-rep senza dipendere dalla fotocamera. Sono stati inoltre introdotti test automatici sintetici per verificare casi controllati di squat, deadlift, pressa militare e perdita del tracking.
+
+\section{Contributi}
+
+I contributi principali del lavoro sono:
+
+\begin{itemize}
+  \item una web app mobile-first funzionante per analisi di tre esercizi di forza;
+  \item integrazione locale di MediaPipe Pose Landmarker in ambiente web;
+  \item modellazione del movimento tramite macchine a stati interpretabili;
+  \item implementazione di controlli tecnici su profondita', lockout, range di movimento, inclinazione del tronco, uso delle gambe e discesa del bilanciere;
+  \item esportazione dei risultati in CSV per analisi successive;
+  \item test automatici della logica decisionale.
+\end{itemize}
+
+\section{Struttura della tesi}
+
+Il Capitolo~\ref{ch:state} presenta lo stato dell'arte: machine learning, deep learning, CNN, pose estimation, biomeccanica essenziale e tecnologie web. Il Capitolo~\ref{ch:proposal} descrive l'architettura del sistema, le scelte implementative e le regole adottate per ciascun esercizio. Il Capitolo~\ref{ch:evaluation} discute la valutazione del prototipo, i test automatici, le metriche suggerite per una validazione su video reali e i limiti osservati. Il Capitolo~\ref{ch:conclusions} riassume i risultati e propone sviluppi futuri.
