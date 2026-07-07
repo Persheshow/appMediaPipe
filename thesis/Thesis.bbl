@@ -1,0 +1,146 @@
+\begin{thebibliography}{10}
+
+\bibitem{bazarevsky2020blazepose}
+Valentin Bazarevsky, Ivan Grishchenko, Karthik Raveendran, Tyler Zhu, Fan
+  Zhang, and Matthias Grundmann.
+\newblock Blazepose: On-device real-time body pose tracking.
+\newblock {\em arXiv preprint arXiv:2006.10204}, 2020.
+
+\bibitem{dempster1955space}
+Wilfrid~Taylor Dempster.
+\newblock Space requirements of the seated operator.
+\newblock Technical report, Wright Air Development Center, 1955.
+
+\bibitem{geron2019hands}
+Aur{\'e}lien G{\'e}ron.
+\newblock {\em Hands-On Machine Learning with Scikit-Learn, Keras, and
+  TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems}.
+\newblock O'Reilly Media, 2 edition, 2019.
+
+\bibitem{goodfellow2016deep}
+Ian Goodfellow, Yoshua Bengio, and Aaron Courville.
+\newblock {\em Deep Learning}.
+\newblock MIT Press, 2016.
+
+\bibitem{mediapipePoseWeb2026}
+{Google Developers}.
+\newblock Pose landmark detection guide for web.
+\newblock
+  \url{https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/web_js},
+  2026.
+\newblock Ultimo accesso: 7 luglio 2026.
+
+\bibitem{mediapipePoseOverview2026}
+{Google Developers}.
+\newblock Pose landmark detection task overview.
+\newblock
+  \url{https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker},
+  2026.
+\newblock Ultimo accesso: 7 luglio 2026.
+
+\bibitem{grishchenko2022blazepose}
+Ivan Grishchenko, Valentin Bazarevsky, Andrei Zanfir, Eduard~Gabriel Bazavan,
+  Mihai Zanfir, Richard Yee, Karthik Raveendran, Matsvei Zhdanovich, Matthias
+  Grundmann, and Cristian Sminchisescu.
+\newblock Blazepose ghum holistic: Real-time 3d human landmarks and pose
+  estimation.
+\newblock {\em arXiv preprint arXiv:2206.11678}, 2022.
+
+\bibitem{he2016resnet}
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+\newblock Deep residual learning for image recognition.
+\newblock In {\em Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition}, pages 770--778, 2016.
+
+\bibitem{howard2017mobilenets}
+Andrew~G. Howard, Menglong Zhu, Bo~Chen, Dmitry Kalenichenko, Weijun Wang,
+  Tobias Weyand, Marco Andreetto, and Hartwig Adam.
+\newblock Mobilenets: Efficient convolutional neural networks for mobile vision
+  applications.
+\newblock {\em arXiv preprint arXiv:1704.04861}, 2017.
+
+\bibitem{ipfRules2024}
+{International Powerlifting Federation}.
+\newblock Technical rules book.
+\newblock
+  \url{https://www.powerlifting.sport/rules/codes/info/technical-rules}, 2024.
+\newblock Consultato come riferimento per le regole tecniche di squat e
+  deadlift.
+
+\bibitem{krizhevsky2012imagenet}
+Alex Krizhevsky, Ilya Sutskever, and Geoffrey~E. Hinton.
+\newblock Imagenet classification with deep convolutional neural networks.
+\newblock In {\em Advances in Neural Information Processing Systems},
+  volume~25, 2012.
+
+\bibitem{lecun2015deep}
+Yann LeCun, Yoshua Bengio, and Geoffrey Hinton.
+\newblock Deep learning.
+\newblock {\em Nature}, 521(7553):436--444, 2015.
+
+\bibitem{lugaresi2019mediapipe}
+Camillo Lugaresi, Jiuqiang Tang, Hadon Nash, Chris McClanahan, Esha Uboweja,
+  Michael Hays, Fan Zhang, Chuo-Ling Chang, Ming~Guang Yong, Juhyun Lee,
+  Wan-Teh Chang, Wei Hua, Manfred Georg, and Matthias Grundmann.
+\newblock Mediapipe: A framework for building perception pipelines.
+\newblock In {\em Third Workshop on Computer Vision for AR/VR at IEEE CVPR},
+  2019.
+
+\bibitem{mdnGetUserMedia2026}
+{MDN Web Docs}.
+\newblock Mediadevices: getusermedia() method.
+\newblock
+  \url{https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia},
+  2026.
+\newblock Ultimo accesso: 7 luglio 2026.
+
+\bibitem{mdnPwa2026}
+{MDN Web Docs}.
+\newblock Progressive web apps.
+\newblock
+  \url{https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps},
+  2026.
+\newblock Ultimo accesso: 7 luglio 2026.
+
+\bibitem{reactDocs2026}
+{Meta Open Source}.
+\newblock React reference overview.
+\newblock \url{https://react.dev/reference/react}, 2026.
+\newblock Ultimo accesso: 7 luglio 2026.
+
+\bibitem{projectRepository2026}
+Lorenzo Napolitano.
+\newblock Applicazione web mobile-first per analisi cinematica con mediapipe,
+  2026.
+\newblock Repository locale del progetto di tesi.
+
+\bibitem{sandler2018mobilenetv2}
+Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, and Liang-Chieh
+  Chen.
+\newblock Mobilenetv2: Inverted residuals and linear bottlenecks.
+\newblock In {\em Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition}, pages 4510--4520, 2018.
+
+\bibitem{viteDocs2026}
+{Vite}.
+\newblock Vite documentation.
+\newblock \url{https://vite.dev/guide/}, 2026.
+\newblock Ultimo accesso: 7 luglio 2026.
+
+\bibitem{vitePwaDocs2026}
+{Vite PWA}.
+\newblock Vite plugin pwa documentation.
+\newblock \url{https://vite-pwa-org.netlify.app/}, 2026.
+\newblock Ultimo accesso: 7 luglio 2026.
+
+\bibitem{winter2009biomechanics}
+David~A. Winter.
+\newblock {\em Biomechanics and Motor Control of Human Movement}.
+\newblock John Wiley \& Sons, 4 edition, 2009.
+
+\bibitem{zatsiorsky2002kinetics}
+Vladimir~M. Zatsiorsky.
+\newblock {\em Kinetics of Human Motion}.
+\newblock Human Kinetics, 2002.
+
+\end{thebibliography}
