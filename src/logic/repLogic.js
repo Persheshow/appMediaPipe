@@ -67,7 +67,7 @@ function checkAscent(state, currentAngle) {
 // ── LOGICA SQUAT ───────────────────────────────────────────────────────────────
 export function processSquat(state, landmarks, side) {
   const cfg = EXERCISES.SQUAT.thresholds;
-  const { shoulder, hip, knee, ankle } = EXERCISES.SQUAT.landmarks[side];
+  const { hip, knee, ankle } = EXERCISES.SQUAT.landmarks[side];
   const lm = landmarks;
 
   // GESTIONE OCCLUSIONE VISIVA

@@ -10,9 +10,21 @@ export default function App() {
 
   // LOGICA ESPORTAZIONE CSV
   const exportCSV = () => {
-    const headers = "Ora,Esercizio,Esito,Errori\n";
-    const rows = sessionLogs.map(log => `${log.time},${log.ex},${log.esito},${log.errori}`).join("\n");
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+    const headers = ['Timestamp', 'Ora', 'Esercizio', 'Lato', 'Esito', 'Angolo primario', 'Angolo secondario', 'Stato finale', 'Errori'];
+    const rows = sessionLogs.map(log => [
+      log.timestamp,
+      log.time,
+      log.ex,
+      log.side,
+      log.esito,
+      log.primaryAngle,
+      log.secondaryAngle,
+      log.finalState,
+      log.errori,
+    ].map(escapeCSV).join(',')).join("\n");
+    const csv = `${headers.map(escapeCSV).join(',')}\n${rows}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);

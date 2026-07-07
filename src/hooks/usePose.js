@@ -41,12 +41,10 @@ export function usePose(exercise, isActive, cameraSide) {
     let isMounted = true;
     async function loadModel() {
       try {
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm' // Se hai i file locali, metti '/wasm'
-        );
+        const vision = await FilesetResolver.forVisionTasks('/wasm');
         const landmarker = await PoseLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task', // o '/models/pose_landmarker_lite.task'
+            modelAssetPath: '/models/pose_landmarker_lite.task',
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
@@ -71,6 +69,7 @@ export function usePose(exercise, isActive, cameraSide) {
   // ── AVVIA CAMERA ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isActive) return;
+    const videoElement = videoRef.current;
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -81,9 +80,9 @@ export function usePose(exercise, isActive, cameraSide) {
           },
           audio: false,
         });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => videoRef.current.play();
+        if (videoElement) {
+          videoElement.srcObject = stream;
+          videoElement.onloadedmetadata = () => videoElement.play();
         }
       } catch (err) {
         setError('Impossibile accedere alla fotocamera: ' + err.message);
@@ -91,9 +90,9 @@ export function usePose(exercise, isActive, cameraSide) {
     }
     startCamera();
     return () => {
-      if (videoRef.current?.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach(t => t.stop());
-        videoRef.current.srcObject = null;
+      if (videoElement?.srcObject) {
+        videoElement.srcObject.getTracks().forEach(t => t.stop());
+        videoElement.srcObject = null;
       }
     };
   }, [isActive]);
@@ -184,14 +183,20 @@ export function usePose(exercise, isActive, cameraSide) {
             if (isValida) { setValidReps(prev => prev + 1); setFaults([]); }
             else { setNoReps(prev => prev + 1); setFaults(event.faults); }
 
-            // Salva nel file di Log
+            // Salva i dati essenziali per analisi e validazione sperimentale.
+            const timestamp = new Date();
             setSessionLogs(prev => [
               ...prev,
               {
-                time: new Date().toLocaleTimeString('it-IT', { hour12: false }),
+                timestamp: timestamp.toISOString(),
+                time: timestamp.toLocaleTimeString('it-IT', { hour12: false }),
                 ex: exercise,
+                side: cameraSide,
                 esito: event.type,
-                errori: event.faults ? event.faults.join(' - ') : 'Nessuno'
+                primaryAngle: primaryAngle === null ? '' : Math.round(primaryAngle),
+                secondaryAngle: secondaryAngle === null ? '' : Math.round(secondaryAngle),
+                finalState: state.movementState,
+                errori: event.faults?.length ? event.faults.join(' - ') : 'Nessuno',
               }
             ]);
           }
