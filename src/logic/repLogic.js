@@ -113,15 +113,15 @@ function checkTimeout(state) {
 // ── TRANSIZIONE DISCESA → RISALITA (Finestra temporale) ───────────────────────
 function checkAscent(state, currentAngle) {
   state.lastAngleHistory.push(currentAngle);
-  
+
   // Manteniamo in memoria gli ultimi 5 frame (circa 80-150 millisecondi)
   if (state.lastAngleHistory.length > 5) {
     state.lastAngleHistory.shift();
   }
-  
+
   // Estraiamo l'angolo più vecchio nel buffer
   const oldestAngle = state.lastAngleHistory[0];
-  
+
   // Se l'angolo attuale è maggiore di 2 gradi rispetto a una frazione di secondo fa,
   // l'atleta ha invertito la marcia e sta spingendo verso l'alto.
   return currentAngle > oldestAngle + 2;
@@ -171,6 +171,15 @@ export function processSquat(state, landmarks, side) {
   const m = state.metrics;
   let event = null;
 
+  // HELPER INTERNO: Valutazione del parallelo
+  const checkDepth = () => {
+    // Usa OR (||) e un piccolo margine (-0.02) sulla Y. 
+    // Il punto 'hip' di MediaPipe è leggermente più alto della piega reale dell'anca (hip crease) definita dall'IPF.
+    if (lm[hip].y > lm[knee].y - 0.02 || kneeAngle < cfg.bottomKnee) {
+      m.deepEnough = true;
+    }
+  };
+
   if (state.movementState === 'STANDING') {
     if (kneeAngle < cfg.topKnee - 25) {
       state.movementState = 'DESCENDING';
@@ -179,10 +188,12 @@ export function processSquat(state, landmarks, side) {
     }
   }
   else if (state.movementState === 'DESCENDING') {
-    if (lm[hip].y > lm[knee].y && kneeAngle < cfg.bottomKnee) m.deepEnough = true;
+    checkDepth(); // Controlla in discesa
     if (checkAscent(state, kneeAngle)) state.movementState = 'ASCENDING';
   }
   else if (state.movementState === 'ASCENDING') {
+    checkDepth(); // Continua a controllare in risalita per catturare il rimbalzo in buca
+
     if (kneeAngle > cfg.topKnee) {
       event = m.deepEnough
         ? { type: 'VALID_REP', faults: [] }
