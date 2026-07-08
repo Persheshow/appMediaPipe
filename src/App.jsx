@@ -37,13 +37,12 @@ export default function App() {
         const videoInputs = devices.filter(device => device.kind === 'videoinput');
         setHasMultipleCameras(videoInputs.length > 1);
       } catch (err) {
-        console.error("Impossibile rilevare i dispositivi video:", err);
+        console.error("Errore nell'enumerazione delle periferiche video:", err);
       }
     }
     checkCameras();
   }, []);
 
-  // Rimossa la colonna dell'angolo secondario dall'esportazione del file di testo
   const exportCSV = () => {
     const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
     const headers = ['Timestamp', 'Ora', 'Esercizio', 'Lato', 'Esito', 'Angolo primario', 'Stato finale', 'Errori'];
@@ -62,156 +61,185 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `dataset_cinematica_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  // Funzione per azzerare l'intero storico memorizzato nella sessione corrente
   const clearAllHistory = () => {
     setSessionLogs([]);
     reset();
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col items-center p-4 font-sans">
-      <header className="w-full max-w-md text-center my-4">
-        <h1 className="text-2xl font-bold tracking-tight text-indigo-400">Analisi Cinematica</h1>
-        <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">{exerciseLabel} - IPF MODE</p>
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white">
+
+      {/* HEADER ISTITUZIONALE */}
+      <header className="w-full max-w-xl text-center my-6 md:my-10">
+        <h2 className="text-[11px] md:text-xs font-bold tracking-widest text-[#002f6c] uppercase mb-2">
+          Università degli Studi di Firenze
+        </h2>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+          Analisi Cinematica basata su Computer Vision
+        </h1>
+        <div className="flex items-center justify-center gap-2 mt-3 text-xs md:text-sm text-slate-500 font-medium">
+          <span>Corso di Laurea in Informatica</span>
+          <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+          <span>Acquisizione Dati (IPF)</span>
+        </div>
       </header>
 
       {!isActive ? (
-        <div className="w-full max-w-md flex flex-col gap-8 mt-6">
-          <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-1">1. Esercizio</h2>
-            {Object.entries(EXERCISE_LABELS).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setExercise(key)}
-                className={`py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${exercise === key ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700 hover:bg-slate-700'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div className="w-full max-w-xl flex flex-col gap-6">
 
-          <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-1">2. Lato videocamera</h2>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCameraSide('LEFT')}
-                className={`flex-1 py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${cameraSide === 'LEFT' ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700'}`}
-              >
-                Sinistra
-              </button>
-              <button
-                onClick={() => setCameraSide('RIGHT')}
-                className={`flex-1 py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${cameraSide === 'RIGHT' ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700'}`}
-              >
-                Destra
-              </button>
-            </div>
-            <p className="text-xs text-slate-500 mt-1 text-center">Indica da quale lato il telefono osserva l'atleta.</p>
-          </div>
+          {/* PANNELLO CONFIGURAZIONE */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-8">
 
-          {hasMultipleCameras && (
+            {/* Esercizio */}
             <div className="flex flex-col gap-3">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-1">3. Lente Fotocamera</h2>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">1. Protocollo di test</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {Object.entries(EXERCISE_LABELS).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setExercise(key)}
+                    className={`py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200 border ${exercise === key
+                        ? 'bg-[#002f6c] text-white border-[#002f6c] shadow-md'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                      }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Lato Videocamera */}
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">2. Posizione Sensore</h3>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setFacingMode('user')}
-                  className={`flex-1 py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${facingMode === 'user' ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700'}`}
+                  onClick={() => setCameraSide('LEFT')}
+                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border ${cameraSide === 'LEFT' ? 'bg-[#002f6c] text-white border-[#002f6c] shadow-md' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                    }`}
                 >
-                  Frontale
+                  Prospettiva Sinistra
                 </button>
                 <button
-                  onClick={() => setFacingMode('environment')}
-                  className={`flex-1 py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${facingMode === 'environment' ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700'}`}
+                  onClick={() => setCameraSide('RIGHT')}
+                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border ${cameraSide === 'RIGHT' ? 'bg-[#002f6c] text-white border-[#002f6c] shadow-md' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                    }`}
                 >
-                  Posteriore
+                  Prospettiva Destra
+                </button>
+              </div>
+            </div>
+
+            {/* Hardware */}
+            {hasMultipleCameras && (
+              <div className="flex flex-col gap-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">3. Selezione Ottica</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setFacingMode('user')}
+                    className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border ${facingMode === 'user' ? 'bg-[#002f6c] text-white border-[#002f6c] shadow-md' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                      }`}
+                  >
+                    Fotocamera Anteriore
+                  </button>
+                  <button
+                    onClick={() => setFacingMode('environment')}
+                    className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border ${facingMode === 'environment' ? 'bg-[#002f6c] text-white border-[#002f6c] shadow-md' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                      }`}
+                  >
+                    Fotocamera Posteriore
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button onClick={() => setIsActive(true)} className="w-full py-4 bg-[#002f6c] hover:bg-[#00224d] active:scale-[0.99] rounded-xl font-bold text-lg text-white shadow-lg transition-all">
+            Inizializza Rilevamento
+          </button>
+
+          {/* ESPORTAZIONE DATI */}
+          {sessionLogs.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between px-2 mb-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Gestione Dati Locali</span>
+                <span className="text-xs font-semibold text-[#002f6c] bg-blue-50 px-2 py-1 rounded-md">
+                  {sessionLogs.length} Record
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={clearAllHistory} className="flex-1 py-3 bg-white border border-red-200 hover:bg-red-50 active:bg-red-100 rounded-xl font-bold text-sm text-red-600 transition-colors">
+                  Azzera Storico
+                </button>
+                <button onClick={exportCSV} className="flex-[2] py-3 bg-[#002f6c]/10 hover:bg-[#002f6c]/20 border border-[#002f6c]/20 rounded-xl font-bold text-sm text-[#002f6c] transition-colors">
+                  Esporta Dataset (.CSV)
                 </button>
               </div>
             </div>
           )}
-
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">
-              {hasMultipleCameras ? "4. Setup" : "3. Setup"}
-            </h2>
-            <ul className="space-y-2 text-sm text-slate-300">
-              <li>Posiziona il dispositivo lateralmente rispetto al corpo.</li>
-              <li>Inquadra tutto il corpo, inclusi piedi e mani.</li>
-              <li>Mantieni la camera stabile durante la serie.</li>
-            </ul>
-          </div>
-
-          <button onClick={() => setIsActive(true)} className="mt-4 w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-xl font-bold text-lg transition-colors text-white">
-            Avvia analisi
-          </button>
-
-          {/* Sezione pulsanti di gestione dati: visibile solo se sono presenti record memorizzati */}
-          {sessionLogs.length > 0 && (
-            <div className="flex flex-col gap-2 mt-2 w-full">
-              <button onClick={exportCSV} className="w-full py-4 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 rounded-xl font-bold text-lg transition-colors text-indigo-400">
-                Esporta dati sessione (.CSV)
-              </button>
-              <button onClick={clearAllHistory} className="w-full py-4 bg-rose-950 hover:bg-rose-900 active:bg-rose-900/80 border border-rose-900 rounded-xl font-bold text-lg transition-colors text-rose-400">
-                Azzera Sessione
-              </button>
-            </div>
-          )}
         </div>
       ) : (
-        <div className="w-full max-w-md flex flex-col items-center">
-          {/* Barra contatori modificata con la rimozione del riquadro No-Rep numerico */}
-          <section className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 flex justify-around mb-4 shadow-lg">
-            <div className="text-center">
-              <p className="text-xs uppercase tracking-wider text-slate-400">Rep valide</p>
-              <p className="text-3xl font-black text-emerald-400 mt-1">{validReps}</p>
+        <div className="w-full max-w-xl flex flex-col items-center">
+
+          {/* DASHBOARD TELEMETRIA (Active Mode) */}
+          <section className="w-full bg-white border border-slate-200 rounded-2xl p-4 flex justify-around mb-4 shadow-sm">
+            <div className="text-center w-1/3">
+              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Ripetizioni Valide</p>
+              <p className="text-3xl font-black text-green-600">{validReps}</p>
             </div>
-            <div className="w-px bg-slate-800 self-stretch" />
-            <div className="text-center flex flex-col items-center justify-center">
-              <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">Dati angoli</p>
-              <p className="text-sm font-mono text-slate-300 whitespace-pre-line">
-                {exercise === 'SQUAT' && (`K: ${angles.primary ? Math.round(angles.primary) : '--'} deg`)}
-                {exercise === 'DEADLIFT' && (`H: ${angles.primary ? Math.round(angles.primary) : '--'} deg\nK: ${angles.secondary ? Math.round(angles.secondary) : '--'} deg`)}
-                {exercise === 'OVERHEAD_PRESS' && (`E: ${angles.primary ? Math.round(angles.primary) : '--'} deg\nT: ${angles.secondary ? Math.round(angles.secondary) : '--'} deg`)}
+            <div className="w-px bg-slate-100 self-stretch" />
+            <div className="text-center w-2/3 flex flex-col items-center justify-center">
+              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Telemetria Articolare</p>
+              <p className="text-sm font-mono text-slate-700 whitespace-pre-line bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                {exercise === 'SQUAT' && (`Ginocchio: ${angles.primary ? Math.round(angles.primary) : '--'}°`)}
+                {exercise === 'DEADLIFT' && (`Anca: ${angles.primary ? Math.round(angles.primary) : '--'}° | Gin: ${angles.secondary ? Math.round(angles.secondary) : '--'}°`)}
+                {exercise === 'OVERHEAD_PRESS' && (`Gomito: ${angles.primary ? Math.round(angles.primary) : '--'}° | Tr: ${angles.secondary ? Math.round(angles.secondary) : '--'}°`)}
               </p>
             </div>
           </section>
 
           {faults.length > 0 && (
-            <div className="w-full mb-4 bg-rose-950/50 border border-rose-800 rounded-xl p-3 text-center shadow-lg">
-              <p className="text-xs font-bold uppercase tracking-wider text-rose-400 mb-1">Motivo no-rep</p>
-              <p className="text-sm font-medium text-rose-200">{faults.join(' - ')}</p>
+            <div className="w-full mb-4 bg-red-50 border border-red-200 rounded-xl p-3 text-center shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-red-500 mb-1">Criterio Invalidazione</p>
+              <p className="text-sm font-semibold text-red-700">{faults.join(' • ')}</p>
             </div>
           )}
 
-          <main className="w-full relative bg-black rounded-xl overflow-hidden border border-slate-800 shadow-2xl" style={{ aspectRatio: '9/16' }}>
+          {/* VIEWPORT VIDEOCAMERA */}
+          <main className="w-full relative bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 shadow-md ring-4 ring-white" style={{ aspectRatio: '9/16' }}>
+
             {isLoading && !error && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 z-10">
-                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-xs text-slate-400 mt-3">{loadingMsg}</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/90 backdrop-blur-sm z-10">
+                <div className="w-8 h-8 border-4 border-[#002f6c] border-t-transparent rounded-full animate-spin" />
+                <p className="text-xs font-semibold text-[#002f6c] mt-4 uppercase tracking-widest">Inizializzazione Rete Neurale...</p>
               </div>
             )}
-            {error && <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4 text-center text-sm text-rose-400 z-20">{error}</div>}
+
+            {error && <div className="absolute inset-0 flex items-center justify-center bg-red-50/95 p-6 text-center text-sm font-semibold text-red-600 z-20 border-4 border-red-200">{error}</div>}
 
             <video ref={videoRef} className={`w-full h-full object-contain ${mirrorClass}`} playsInline muted />
             <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full object-contain ${mirrorClass}`} />
 
+            {/* AVVISO OCCLUSIONE */}
             {isTrackingLost && !isLoading && !error && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-rose-900/90 border border-rose-500 text-white px-4 py-2 rounded-full text-xs font-bold tracking-wide shadow-lg z-20 flex items-center gap-2">
-                <span className="w-2 h-2 bg-rose-400 rounded-full animate-pulse" />
-                Corpo non rilevato
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-red-600 text-white px-5 py-2.5 rounded-full text-xs font-bold tracking-widest shadow-lg z-20 flex items-center gap-2 border-2 border-white/20">
+                <span className="w-2 h-2 bg-white rounded-full animate-ping" />
+                Target Anatomico Non Rilevato
               </div>
             )}
 
+            {/* PULSANTE SWITCH LENTE */}
             {hasMultipleCameras && !isLoading && !error && (
               <button
                 onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')}
-                className="absolute bottom-4 right-4 bg-slate-900/80 hover:bg-slate-800 active:bg-slate-950 border border-slate-700 text-indigo-400 p-3 rounded-full shadow-xl z-30 transition-colors backdrop-blur-xs"
+                className="absolute bottom-6 right-6 bg-white/90 hover:bg-white border border-slate-200 text-[#002f6c] p-3.5 rounded-full shadow-lg z-30 transition-all backdrop-blur-md"
                 title="Inverti fotocamera"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
@@ -221,41 +249,53 @@ export default function App() {
             )}
           </main>
 
-          {/* Footer semplificato con la rimozione del pulsante Azzera */}
-          <footer className="w-full mt-4 flex gap-2">
-            <button onClick={() => setIsActive(false)} className="w-full py-3 bg-rose-950 hover:bg-rose-900 border border-rose-900 rounded-xl font-medium text-sm text-rose-400">
-              Ferma e cambia
+          <footer className="w-full mt-6">
+            <button onClick={() => setIsActive(false)} className="w-full py-4 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl font-bold text-sm text-slate-700 shadow-sm transition-colors">
+              Interrompi Sessione di Acquisizione
             </button>
           </footer>
         </div>
       )}
 
-      {/* COMPONENTE STORICO GENERALE: Posizionato esternamente per essere visibile in entrambe le pagine */}
+      {/* REGISTRO DATI (Visibile globalmente se ci sono dati) */}
       {sessionLogs.length > 0 && (
-        <section className="w-full max-w-md mt-8 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-lg">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Ultime ripetizioni (Sessione)</h2>
-            <span className="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded-md font-semibold border border-indigo-800">
-              {sessionLogs.length} Totali
+        <section className="w-full max-w-xl mt-10 mb-8 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-slate-50 border-b border-slate-200 px-5 py-4 flex items-center justify-between">
+            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-widest">Registro Acquisizioni</h2>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-[#002f6c] bg-[#002f6c]/10 px-2.5 py-1 rounded">
+              Buffer: {sessionLogs.length}
             </span>
           </div>
-          <ol className="space-y-2">
-            {sessionLogs.slice(-5).reverse().map((log, index) => (
-              <li key={`${log.timestamp}-${index}`} className="flex items-start justify-between gap-3 text-sm border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {log.ex === 'SQUAT' ? 'Squat' : log.ex === 'DEADLIFT' ? 'Stacco' : 'Military'}
+          <div className="divide-y divide-slate-100">
+            {sessionLogs.slice(-10).reverse().map((log, index) => (
+              <div key={`${log.timestamp}-${index}`} className="flex items-center justify-between px-5 py-3 text-sm hover:bg-slate-50 transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                      {log.time}
+                    </span>
+                    <span className="font-semibold text-slate-700">
+                      {log.ex === 'SQUAT' ? 'Squat' : log.ex === 'DEADLIFT' ? 'Stacco' : 'Pressa'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end">
+                  <span className={`text-xs font-bold uppercase tracking-wider ${log.esito === 'VALID_REP' ? 'text-green-600' : 'text-red-600'}`}>
+                    {log.esito === 'VALID_REP' ? 'Valida' : 'Non Valida'}
                   </span>
-                  <span className={log.esito === 'VALID_REP' ? 'text-emerald-300 font-medium' : 'text-rose-300 font-medium'}>
-                    {log.esito === 'VALID_REP' ? 'Valida' : 'No-rep'}
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {log.errori === 'Nessuno' ? `Rilevamento: ${log.primaryAngle}°` : log.errori}
                   </span>
                 </div>
-                <span className="text-right text-xs text-slate-400 self-center">
-                  {log.errori === 'Nessuno' ? `${log.time} (${log.primaryAngle}°)` : `${log.time} - ${log.errori}`}
-                </span>
-              </li>
+              </div>
             ))}
-          </ol>
+            {sessionLogs.length > 10 && (
+              <div className="px-5 py-3 text-center text-xs text-slate-400 font-medium bg-slate-50">
+                Visualizzati gli ultimi 10 record. Esporta in CSV per l'analisi completa.
+              </div>
+            )}
+          </div>
         </section>
       )}
     </div>
