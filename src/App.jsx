@@ -11,9 +11,17 @@ export default function App() {
   const [exercise, setExercise] = useState('SQUAT');
   const [isActive, setIsActive] = useState(false);
   const [cameraSide, setCameraSide] = useState('LEFT');
+  
+  // Nuovo stato: Selezione Fotocamera ('user' = frontale, 'environment' = posteriore)
+  const [facingMode, setFacingMode] = useState('user');
 
-  const { videoRef, canvasRef, isLoading, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset } = usePose(exercise, isActive, cameraSide);
+  // Passiamo facingMode all'hook
+  const { videoRef, canvasRef, isLoading, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset } = usePose(exercise, isActive, cameraSide, facingMode);
+  
   const exerciseLabel = EXERCISE_LABELS[exercise];
+  
+  // Determina se specchiare il video (solo per la fotocamera frontale)
+  const mirrorClass = facingMode === 'user' ? 'scale-x-[-1]' : '';
 
   const exportCSV = () => {
     const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
@@ -79,11 +87,30 @@ export default function App() {
                 Destra
               </button>
             </div>
-            <p className="text-xs text-slate-500 mt-1 text-center">Indica da quale lato il telefono osserva il tuo corpo.</p>
+            <p className="text-xs text-slate-500 mt-1 text-center">Indica da quale lato il telefono osserva l'atleta.</p>
+          </div>
+
+          {/* NUOVA SEZIONE FOTOCAMERA */}
+          <div className="flex flex-col gap-3">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-1">3. Lente Fotocamera</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFacingMode('user')}
+                className={`flex-1 py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${facingMode === 'user' ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700'}`}
+              >
+                Frontale
+              </button>
+              <button
+                onClick={() => setFacingMode('environment')}
+                className={`flex-1 py-4 rounded-xl text-sm font-semibold uppercase tracking-wider transition-colors ${facingMode === 'environment' ? 'bg-indigo-600 text-white border-2 border-indigo-400' : 'bg-slate-800 text-slate-400 border-2 border-slate-700'}`}
+              >
+                Posteriore
+              </button>
+            </div>
           </div>
 
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">3. Setup</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">4. Setup</h2>
             <ul className="space-y-2 text-sm text-slate-300">
               <li>Posiziona il telefono lateralmente rispetto al corpo.</li>
               <li>Inquadra tutto il corpo, inclusi piedi e mani.</li>
@@ -139,8 +166,9 @@ export default function App() {
             )}
             {error && <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4 text-center text-sm text-rose-400 z-20">{error}</div>}
 
-            <video ref={videoRef} className="w-full h-full object-cover scale-x-[-1]" playsInline muted />
-            <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full object-cover scale-x-[-1]" />
+            {/* Aggiunta della classe dinamica per evitare di specchiare la fotocamera posteriore */}
+            <video ref={videoRef} className={`w-full h-full object-cover ${mirrorClass}`} playsInline muted />
+            <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full object-cover ${mirrorClass}`} />
           </main>
 
           <footer className="w-full mt-4 flex gap-2">

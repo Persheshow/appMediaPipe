@@ -3,7 +3,8 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
 import { EXERCISES } from '../config/exercises';
 
-export function usePose(exercise, isActive, cameraSide) {
+// Aggiunto facingMode come quarto parametro
+export function usePose(exercise, isActive, cameraSide, facingMode) {
   // ── REFS ──────────────────────────────────────────────────────────────────
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -34,8 +35,8 @@ export function usePose(exercise, isActive, cameraSide) {
     setNoReps(0);
     setFaults([]);
     setAngles({ primary: null, secondary: null });
-    setSessionLogs([]); // Svuota i log al cambio esercizio o di lato
-  }, [exercise, isActive, cameraSide]);
+    setSessionLogs([]); // Svuota i log al cambio esercizio, lato o fotocamera
+  }, [exercise, isActive, cameraSide, facingMode]); // Aggiunto facingMode
 
   // ── CARICA MODELLO ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -75,7 +76,7 @@ export function usePose(exercise, isActive, cameraSide) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: 'user',
+            facingMode: facingMode, // Usa il parametro dinamico passato da App.jsx
             width: { ideal: 720 },
             height: { ideal: 1280 },
           },
@@ -96,7 +97,7 @@ export function usePose(exercise, isActive, cameraSide) {
         videoElement.srcObject = null;
       }
     };
-  }, [isActive]);
+  }, [isActive, facingMode]); // Aggiunto facingMode come dipendenza
 
   // ── LOOP PRINCIPALE ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -163,7 +164,6 @@ export function usePose(exercise, isActive, cameraSide) {
 
           const lms = results.landmarks[0];
 
-
           const { state, event, primaryAngle, secondaryAngle, isTarget } = processFrame(
             exercise, repStateRef.current, lms, cameraSide
           );
@@ -182,7 +182,6 @@ export function usePose(exercise, isActive, cameraSide) {
             const isValida = event.type === 'VALID_REP';
             if (isValida) { setValidReps(prev => prev + 1); setFaults([]); }
             else { setNoReps(prev => prev + 1); setFaults(event.faults); }
-
 
             const timestamp = new Date();
             setSessionLogs(prev => [
@@ -214,7 +213,7 @@ export function usePose(exercise, isActive, cameraSide) {
     }
     animFrameRef.current = requestAnimationFrame(loop);
     return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
-  }, [exercise, isActive, cameraSide]);
+  }, [exercise, isActive, cameraSide, facingMode]); // Aggiunto facingMode
 
   function reset() {
     repStateRef.current = createInitialState();
