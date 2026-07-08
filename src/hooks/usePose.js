@@ -34,6 +34,7 @@ export function usePose(exercise, isActive, cameraSide) {
     setNoReps(0);
     setFaults([]);
     setAngles({ primary: null, secondary: null });
+    setSessionLogs([]); // Svuota i log al cambio esercizio o di lato
   }, [exercise, isActive, cameraSide]);
 
   // ── CARICA MODELLO ────────────────────────────────────────────────────────
@@ -75,7 +76,7 @@ export function usePose(exercise, isActive, cameraSide) {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
-            width: { ideal: 720 }, // Ottimizzato per aspect ratio verticale
+            width: { ideal: 720 },
             height: { ideal: 1280 },
           },
           audio: false,
@@ -139,7 +140,6 @@ export function usePose(exercise, isActive, cameraSide) {
 
       if (video && canvas && landmarker && video.readyState >= 2) {
 
-        // FIX PRESTAZIONALE: Evita doppie inferenze sullo stesso frame della fotocamera
         if (video.currentTime === lastVideoTimeRef.current) {
           animFrameRef.current = requestAnimationFrame(loop);
           return;
@@ -163,7 +163,7 @@ export function usePose(exercise, isActive, cameraSide) {
 
           const lms = results.landmarks[0];
 
-          // ESTRAZIONE LOGICA DI BUSINESS
+
           const { state, event, primaryAngle, secondaryAngle, isTarget } = processFrame(
             exercise, repStateRef.current, lms, cameraSide
           );
@@ -183,7 +183,7 @@ export function usePose(exercise, isActive, cameraSide) {
             if (isValida) { setValidReps(prev => prev + 1); setFaults([]); }
             else { setNoReps(prev => prev + 1); setFaults(event.faults); }
 
-            // Salva i dati essenziali per analisi e validazione sperimentale.
+
             const timestamp = new Date();
             setSessionLogs(prev => [
               ...prev,

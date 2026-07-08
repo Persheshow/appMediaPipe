@@ -208,7 +208,7 @@ export function processOverheadPress(state, landmarks, side) {
   const rawKnee = calculateAngle(lm[hip], lm[knee], lm[ankle]);
   state.smoothedPrimary = smoothAngle(state.smoothedPrimary, rawElbow);
   const elbowAngle = state.smoothedPrimary;
-  const vertical = { x: lm[shoulder].x, y: lm[shoulder].y + 0.1, z: lm[shoulder].z || 0 };
+  const vertical = { x: lm[shoulder].x, y: lm[shoulder].y - 0.1, z: lm[shoulder].z || 0 };
   const rawTrunk = calculateAngle(vertical, lm[shoulder], lm[hip]);
   state.smoothedSecondary = smoothAngle(state.smoothedSecondary, rawTrunk);
   const trunkAngle = state.smoothedSecondary;
