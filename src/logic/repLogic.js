@@ -22,22 +22,22 @@ export function calculateAngle(a, b, c) {
 // ── STATO INIZIALE ─────────────────────────────────────────────────────────────
 export function createInitialState() {
   return {
-    movementState:     'STANDING',
-    smoothedPrimary:   null,
+    movementState: 'STANDING',
+    smoothedPrimary: null,
     smoothedSecondary: null,
-    lastAngle:         180,
-    lastAngleHistory:  [],
-    lastActiveTime:    Date.now(),
-    occludedSince:     null,
+    lastAngle: 180,
+    lastAngleHistory: [],
+    lastActiveTime: Date.now(),
+    occludedSince: null,
     metrics: {
-      faults:               new Set(),
-      startX:               null,
-      maxAscentAngle:       0,
-      lockedAtStart:        false,
-      deepEnough:           false,
-      minWristY:            1.0,
-      maxWristYDuringLift:  null,
-      startKneeAngle:       null,
+      faults: new Set(),
+      startX: null,
+      maxAscentAngle: 0,
+      lockedAtStart: false,
+      deepEnough: false,
+      minWristY: 1.0,
+      maxWristYDuringLift: null,
+      startKneeAngle: null,
     },
   };
 }
@@ -47,8 +47,8 @@ export function createInitialState() {
 // o stima la posizione dall'anca
 function getShoulderLandmark(lm, primaryIdx, hip) {
   const oppositeIdx = primaryIdx === 11 ? 12 : 11;
-  const primary   = lm[primaryIdx];
-  const opposite  = lm[oppositeIdx];
+  const primary = lm[primaryIdx];
+  const opposite = lm[oppositeIdx];
 
   // Soglia bassa (0.25) per tollerare occlusione parziale del bilanciere
   if (primary && primary.visibility > 0.25) return primary;
@@ -71,7 +71,7 @@ function getShoulderLandmark(lm, primaryIdx, hip) {
 // Per l'overhead press il bilanciere può occludere il gomito nella fase di discesa
 function getElbowLandmark(lm, primaryIdx, shoulder, wrist) {
   const oppositeIdx = primaryIdx === 13 ? 14 : 13;
-  const primary  = lm[primaryIdx];
+  const primary = lm[primaryIdx];
   const opposite = lm[oppositeIdx];
 
   if (primary && primary.visibility > 0.25) return primary;
@@ -102,11 +102,11 @@ function checkTimeout(state) {
     return;
   }
   if (now - state.lastActiveTime > 5000) {
-    state.movementState      = 'STANDING';
+    state.movementState = 'STANDING';
     state.metrics.deepEnough = false;
-    state.metrics.faults     = new Set();
-    state.lastAngleHistory   = [];
-    state.lastActiveTime     = now;
+    state.metrics.faults = new Set();
+    state.lastAngleHistory = [];
+    state.lastActiveTime = now;
   }
 }
 
@@ -137,11 +137,9 @@ export function processSquat(state, landmarks, side) {
   const { hip, knee, ankle } = EXERCISES.SQUAT.landmarks[side];
   const lm = landmarks;
 
-  // Squat: hip/knee/ankle sono raramente occlusi dal bilanciere
-  // Soglia a 0.3 per tollerare illuminazione scarsa in palestra
   const isVisible =
-    lm[hip]   && lm[hip].visibility   > 0.3 &&
-    lm[knee]  && lm[knee].visibility  > 0.3 &&
+    lm[hip] && lm[hip].visibility > 0.3 &&
+    lm[knee] && lm[knee].visibility > 0.3 &&
     lm[ankle] && lm[ankle].visibility > 0.3;
 
   if (!isVisible) {
@@ -149,7 +147,7 @@ export function processSquat(state, landmarks, side) {
     if (shouldReset) {
       return {
         state: createInitialState(),
-        event: { type: 'NO_REP', faults: ['Tracking perso (occlusione)'] },
+        event: null, // Reset silenzioso: non conta come no-rep
         primaryAngle: null, secondaryAngle: null, isTarget: false,
       };
     }
@@ -189,9 +187,9 @@ export function processSquat(state, landmarks, side) {
   state.lastAngle = kneeAngle;
   return {
     state, event,
-    primaryAngle:   kneeAngle,
+    primaryAngle: kneeAngle,
     secondaryAngle: state.smoothedSecondary,
-    isTarget:       m.deepEnough,
+    isTarget: m.deepEnough,
   };
 }
 
@@ -201,9 +199,8 @@ export function processDeadlift(state, landmarks, side) {
   const { shoulder: shoulderIdx, hip, knee, ankle, wrist } = EXERCISES.DEADLIFT.landmarks[side];
   const lm = landmarks;
 
-  // Hip/knee devono essere visibili — spalla usa fallback per il bilanciere
   const isVisible =
-    lm[hip]  && lm[hip].visibility  > 0.3 &&
+    lm[hip] && lm[hip].visibility > 0.3 &&
     lm[knee] && lm[knee].visibility > 0.3;
 
   if (!isVisible) {
@@ -211,7 +208,7 @@ export function processDeadlift(state, landmarks, side) {
     if (shouldReset) {
       return {
         state: createInitialState(),
-        event: { type: 'NO_REP', faults: ['Tracking perso (occlusione)'] },
+        event: null, // Reset silenzioso
         primaryAngle: null, secondaryAngle: null, isTarget: false,
       };
     }
@@ -220,22 +217,19 @@ export function processDeadlift(state, landmarks, side) {
   state.occludedSince = null;
   checkTimeout(state);
 
-  // Spalla con fallback — tolera occlusione da bilanciere
   const shoulderLm = getShoulderLandmark(lm, shoulderIdx, lm[hip]);
-
   const rawKnee = calculateAngle(lm[hip], lm[knee], lm[ankle]);
-  const rawHip  = calculateAngle(shoulderLm, lm[hip], lm[knee]);
+  const rawHip = calculateAngle(shoulderLm, lm[hip], lm[knee]);
 
-  state.smoothedPrimary   = smoothAngle(state.smoothedPrimary,   rawHip);
+  state.smoothedPrimary = smoothAngle(state.smoothedPrimary, rawHip);
   state.smoothedSecondary = smoothAngle(state.smoothedSecondary, rawKnee);
 
-  const hipAngle  = state.smoothedPrimary;
+  const hipAngle = state.smoothedPrimary;
   const kneeAngle = state.smoothedSecondary;
   const m = state.metrics;
 
-  const isErect      = kneeAngle > cfg.erectKnee && hipAngle > cfg.erectHip;
+  const isErect = kneeAngle > cfg.erectKnee && hipAngle > cfg.erectHip;
   const wristVisible = lm[wrist] && lm[wrist].visibility > 0.25;
-  // Fallback polso: stima dall'anca se il bilanciere lo occlude
   const wristY = wristVisible ? lm[wrist].y : lm[hip].y + 0.3;
 
   let event = null;
@@ -249,9 +243,9 @@ export function processDeadlift(state, landmarks, side) {
   else if (state.movementState === 'SETUP') {
     m.minWristY = Math.max(m.minWristY, wristY);
     if (wristY < m.minWristY - cfg.liftThreshold) {
-      state.movementState         = 'LIFTING';
-      m.maxWristYDuringLift       = wristY;
-      state.lastAngleHistory      = [];
+      state.movementState = 'LIFTING';
+      m.maxWristYDuringLift = wristY;
+      state.lastAngleHistory = [];
     }
   }
   else if (state.movementState === 'LIFTING') {
@@ -268,7 +262,7 @@ export function processDeadlift(state, landmarks, side) {
     m.maxWristYDuringLift = Math.min(m.maxWristYDuringLift ?? wristY, wristY);
     if (isErect) {
       event = { type: 'VALID_REP', faults: [] };
-      state.movementState   = 'LOCKED';
+      state.movementState = 'LOCKED';
       m.maxWristYDuringLift = null;
     }
   }
@@ -281,9 +275,9 @@ export function processDeadlift(state, landmarks, side) {
   state.lastAngle = hipAngle;
   return {
     state, event,
-    primaryAngle:   hipAngle,
+    primaryAngle: hipAngle,
     secondaryAngle: kneeAngle,
-    isTarget:       isErect,
+    isTarget: isErect,
   };
 }
 
@@ -292,25 +286,24 @@ export function processOverheadPress(state, landmarks, side) {
   const cfg = EXERCISES.OVERHEAD_PRESS.thresholds;
   const {
     shoulder: shoulderIdx,
-    elbow:    elbowIdx,
+    elbow: elbowIdx,
     wrist,
     hip, knee, ankle,
   } = EXERCISES.OVERHEAD_PRESS.landmarks[side];
   const lm = landmarks;
 
-  // Shoulder/hip devono essere visibili — gomito usa fallback per il bilanciere
   const isVisible =
     lm[shoulderIdx] && lm[shoulderIdx].visibility > 0.25 &&
-    lm[hip]         && lm[hip].visibility         > 0.3  &&
-    lm[knee]        && lm[knee].visibility         > 0.3  &&
-    lm[ankle]       && lm[ankle].visibility        > 0.3;
+    lm[hip] && lm[hip].visibility > 0.3 &&
+    lm[knee] && lm[knee].visibility > 0.3 &&
+    lm[ankle] && lm[ankle].visibility > 0.3;
 
   if (!isVisible) {
     const { shouldReset } = handleOcclusion(state, 'OVERHEAD_PRESS');
     if (shouldReset) {
       return {
         state: createInitialState(),
-        event: { type: 'NO_REP', faults: ['Tracking perso (occlusione)'] },
+        event: null, // Reset silenzioso
         primaryAngle: null, secondaryAngle: null, isTarget: false,
       };
     }
@@ -319,14 +312,11 @@ export function processOverheadPress(state, landmarks, side) {
   state.occludedSince = null;
   checkTimeout(state);
 
-  // Gomito con fallback — tolera occlusione da bilanciere in fase di discesa
   const elbowLm = getElbowLandmark(lm, elbowIdx, lm[shoulderIdx], lm[wrist]);
-
   const rawElbow = calculateAngle(lm[shoulderIdx], elbowLm, lm[wrist]);
   state.smoothedPrimary = smoothAngle(state.smoothedPrimary, rawElbow);
   const elbowAngle = state.smoothedPrimary;
 
-  // Angolo tronco per iperlordosi — y - 0.1 punta verso l'alto
   const vertical = {
     x: lm[shoulderIdx].x,
     y: lm[shoulderIdx].y - 0.1,
@@ -336,9 +326,8 @@ export function processOverheadPress(state, landmarks, side) {
   state.smoothedSecondary = smoothAngle(state.smoothedSecondary, rawTrunk);
   const trunkAngle = state.smoothedSecondary;
 
-  // Flessione ginocchio per rilevare push press
-  const rawKnee  = calculateAngle(lm[hip], lm[knee], lm[ankle]);
-  const m        = state.metrics;
+  const rawKnee = calculateAngle(lm[hip], lm[knee], lm[ankle]);
+  const m = state.metrics;
   const kneeBend = m.startKneeAngle === null ? 0 : m.startKneeAngle - rawKnee;
 
   let event = null;
@@ -348,29 +337,29 @@ export function processOverheadPress(state, landmarks, side) {
     if (m.startKneeAngle === null || elbowAngle > cfg.topElbow) m.startKneeAngle = rawKnee;
     if (elbowAngle < 140) {
       state.movementState = 'DESCENDING';
-      m.deepEnough        = false;
-      m.faults            = new Set();
+      m.deepEnough = false;
+      m.faults = new Set();
       state.lastAngleHistory = [];
     }
   }
   else if (state.movementState === 'DESCENDING') {
-    if (elbowAngle < cfg.bottomElbow)    m.deepEnough = true;
-    if (trunkAngle > cfg.maxTrunkLean)   m.faults.add('Iperlordosi lombare');
-    if (kneeBend   > cfg.maxKneeBend)    m.faults.add('Uso delle gambe (push press)');
-    if (checkAscent(state, elbowAngle))  state.movementState = 'ASCENDING';
+    if (elbowAngle < cfg.bottomElbow) m.deepEnough = true;
+    if (trunkAngle > cfg.maxTrunkLean) m.faults.add('Iperlordosi lombare');
+    if (kneeBend > cfg.maxKneeBend) m.faults.add('Uso delle gambe (push press)');
+    if (checkAscent(state, elbowAngle)) state.movementState = 'ASCENDING';
   }
   else if (state.movementState === 'ASCENDING') {
-    if (trunkAngle > cfg.maxTrunkLean)   m.faults.add('Iperlordosi lombare');
-    if (kneeBend   > cfg.maxKneeBend)    m.faults.add('Uso delle gambe (push press)');
+    if (trunkAngle > cfg.maxTrunkLean) m.faults.add('Iperlordosi lombare');
+    if (kneeBend > cfg.maxKneeBend) m.faults.add('Uso delle gambe (push press)');
     if (elbowAngle > cfg.topElbow) {
       if (!m.deepEnough) m.faults.add('Range di movimento incompleto');
       event = m.faults.size === 0
         ? { type: 'VALID_REP', faults: [] }
-        : { type: 'NO_REP',    faults: Array.from(m.faults) };
+        : { type: 'NO_REP', faults: Array.from(m.faults) };
       state.movementState = 'STANDING';
-      m.deepEnough        = false;
-      m.faults            = new Set();
-      m.startKneeAngle    = rawKnee;
+      m.deepEnough = false;
+      m.faults = new Set();
+      m.startKneeAngle = rawKnee;
       state.lastAngleHistory = [];
     }
   }
@@ -378,16 +367,16 @@ export function processOverheadPress(state, landmarks, side) {
   state.lastAngle = elbowAngle;
   return {
     state, event,
-    primaryAngle:   elbowAngle,
+    primaryAngle: elbowAngle,
     secondaryAngle: trunkAngle,
-    isTarget:       elbowAngle > cfg.topElbow,
+    isTarget: elbowAngle > cfg.topElbow,
   };
 }
 
 // ── DISPATCHER ─────────────────────────────────────────────────────────────────
 export function processFrame(exercise, state, landmarks, side) {
-  if (exercise === 'SQUAT')          return processSquat(state, landmarks, side);
-  if (exercise === 'DEADLIFT')       return processDeadlift(state, landmarks, side);
+  if (exercise === 'SQUAT') return processSquat(state, landmarks, side);
+  if (exercise === 'DEADLIFT') return processDeadlift(state, landmarks, side);
   if (exercise === 'OVERHEAD_PRESS') return processOverheadPress(state, landmarks, side);
   return { state, event: null };
 }

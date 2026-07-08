@@ -167,8 +167,8 @@ export default function App() {
             {error && <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4 text-center text-sm text-rose-400 z-20">{error}</div>}
 
             {/* Aggiunta della classe dinamica per evitare di specchiare la fotocamera posteriore */}
-            <video ref={videoRef} className={`w-full h-full object-cover ${mirrorClass}`} playsInline muted />
-            <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full object-cover ${mirrorClass}`} />
+            <video ref={videoRef} className={`w-full h-full object-contain ${mirrorClass}`} playsInline muted />
+            <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full object-contain ${mirrorClass}`} />
           </main>
 
           <footer className="w-full mt-4 flex gap-2">

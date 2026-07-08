@@ -77,8 +77,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: facingMode, // Usa il parametro dinamico passato da App.jsx
-            width: { ideal: 720 },
-            height: { ideal: 1280 },
+            // Rimosse le restrizioni ideal width/height per evitare lo zoom del sensore
           },
           audio: false,
         });
@@ -97,7 +96,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
         videoElement.srcObject = null;
       }
     };
-  }, [isActive, facingMode]); // Aggiunto facingMode come dipendenza
+  }, [isActive, facingMode]);
 
   // ── LOOP PRINCIPALE ───────────────────────────────────────────────────────
   useEffect(() => {
