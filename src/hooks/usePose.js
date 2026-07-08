@@ -3,7 +3,8 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
 import { EXERCISES } from '../config/exercises';
 
-export function usePose(exercise, isActive, cameraSide, facingMode) {
+// Aggiunta la funzione di callback onNewLog come quinto parametro
+export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
   // ── REFS ──────────────────────────────────────────────────────────────────
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -17,16 +18,15 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
 
   // ── STATE ─────────────────────────────────────────────────────────────────
   const [isLoading, setIsLoading] = useState(true);
-  const [isTrackingLost, setIsTrackingLost] = useState(false); // NUOVO STATO WARNING
+  const [isTrackingLost, setIsTrackingLost] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('Caricamento modello AI...');
   const [error, setError] = useState(null);
   const [validReps, setValidReps] = useState(0);
   const [noReps, setNoReps] = useState(0);
   const [faults, setFaults] = useState([]);
   const [angles, setAngles] = useState({ primary: null, secondary: null });
-  const [sessionLogs, setSessionLogs] = useState([]);
 
-  // ── RESET ─────────────────────────────────────────────────────────────────
+  // ── RESET LOCAL COUNTERS ──────────────────────────────────────────────────
   useEffect(() => {
     repStateRef.current = createInitialState();
     prevAnglesRef.current = { primary: null, secondary: null };
@@ -35,8 +35,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
     setNoReps(0);
     setFaults([]);
     setAngles({ primary: null, secondary: null });
-    setSessionLogs([]);
-    setIsTrackingLost(false); // Azzera il warning
+    setIsTrackingLost(false);
   }, [exercise, isActive, cameraSide, facingMode]);
 
   // ── CARICA MODELLO ────────────────────────────────────────────────────────
@@ -76,9 +75,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: facingMode,
-          },
+          video: { facingMode: facingMode },
           audio: false,
         });
         if (videoElement) {
@@ -161,12 +158,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
 
         if (results.landmarks?.length > 0) {
           noLandmarkFrames.current = 0;
-
-          // Spegne il warning se era attivo
-          setIsTrackingLost(prev => {
-            if (prev) return false;
-            return prev;
-          });
+          setIsTrackingLost(prev => { if (prev) return false; return prev; });
 
           const lms = results.landmarks[0];
 
@@ -189,32 +181,28 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
             else { setNoReps(prev => prev + 1); setFaults(event.faults); }
 
             const timestamp = new Date();
-            setSessionLogs(prev => [
-              ...prev,
-              {
+            
+            // Esecuzione della callback per trasmettere il log ad App.jsx
+            if (onNewLog) {
+              onNewLog({
                 timestamp: timestamp.toISOString(),
                 time: timestamp.toLocaleTimeString('it-IT', { hour12: false }),
                 ex: exercise,
                 side: cameraSide,
                 esito: event.type,
                 primaryAngle: primaryAngle === null ? '' : Math.round(primaryAngle),
-                secondaryAngle: secondaryAngle === null ? '' : Math.round(secondaryAngle),
                 finalState: state.movementState,
                 errori: event.faults?.length ? event.faults.join(' - ') : 'Nessuno',
-              }
-            ]);
+              });
+            }
           }
 
           drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, cameraSide, exercise);
 
         } else {
-          // GESTIONE CORPO NON RILEVATO (NON BLOCCANTE)
           noLandmarkFrames.current++;
           if (noLandmarkFrames.current > 30) {
-            setIsTrackingLost(prev => {
-              if (!prev) return true;
-              return prev;
-            });
+            setIsTrackingLost(prev => { if (!prev) return true; return prev; });
           }
         }
       }
@@ -232,10 +220,8 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
     setNoReps(0);
     setFaults([]);
     setAngles({ primary: null, secondary: null });
-    setSessionLogs([]);
     setIsTrackingLost(false);
   }
 
-  // Aggiunto isTrackingLost all'export
-  return { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset };
+  return { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, noReps, faults, angles, reset };
 }

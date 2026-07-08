@@ -12,16 +12,23 @@ export default function App() {
   const [isActive, setIsActive] = useState(false);
   const [cameraSide, setCameraSide] = useState('LEFT');
   const [facingMode, setFacingMode] = useState('user');
-  
-  // Rilevamento hardware multicamera
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
 
-  const { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset } = usePose(exercise, isActive, cameraSide, facingMode);
-  
+  // Stato dello storico centralizzato nell'interfaccia principale
+  const [sessionLogs, setSessionLogs] = useState([]);
+
+  // Callback per registrare la ripetizione nello stato globale di App.jsx
+  const handleNewLog = (newLog) => {
+    setSessionLogs(prev => [...prev, newLog]);
+  };
+
+  const { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, faults, angles, reset } = usePose(
+    exercise, isActive, cameraSide, facingMode, handleNewLog
+  );
+
   const exerciseLabel = EXERCISE_LABELS[exercise];
   const mirrorClass = facingMode === 'user' ? 'scale-x-[-1]' : '';
 
-  // Controllo hardware all'avvio dell'applicazione
   useEffect(() => {
     async function checkCameras() {
       try {
@@ -30,15 +37,16 @@ export default function App() {
         const videoInputs = devices.filter(device => device.kind === 'videoinput');
         setHasMultipleCameras(videoInputs.length > 1);
       } catch (err) {
-        console.error("Impossibile contare le fotocamere disponibili:", err);
+        console.error("Impossibile rilevare i dispositivi video:", err);
       }
     }
     checkCameras();
   }, []);
 
+  // Rimossa la colonna dell'angolo secondario dall'esportazione del file di testo
   const exportCSV = () => {
     const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const headers = ['Timestamp', 'Ora', 'Esercizio', 'Lato', 'Esito', 'Angolo primario', 'Angolo secondario', 'Stato finale', 'Errori'];
+    const headers = ['Timestamp', 'Ora', 'Esercizio', 'Lato', 'Esito', 'Angolo primario', 'Stato finale', 'Errori'];
     const rows = sessionLogs.map(log => [
       log.timestamp,
       log.time,
@@ -46,7 +54,6 @@ export default function App() {
       log.side,
       log.esito,
       log.primaryAngle,
-      log.secondaryAngle,
       log.finalState,
       log.errori,
     ].map(escapeCSV).join(',')).join('\n');
@@ -60,6 +67,12 @@ export default function App() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // Funzione per azzerare l'intero storico memorizzato nella sessione corrente
+  const clearAllHistory = () => {
+    setSessionLogs([]);
+    reset();
   };
 
   return (
@@ -138,14 +151,21 @@ export default function App() {
             Avvia analisi
           </button>
 
+          {/* Sezione pulsanti di gestione dati: visibile solo se sono presenti record memorizzati */}
           {sessionLogs.length > 0 && (
-            <button onClick={exportCSV} className="mt-2 w-full py-4 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 rounded-xl font-bold text-lg transition-colors text-indigo-400">
-              Esporta dati sessione (.CSV)
-            </button>
+            <div className="flex flex-col gap-2 mt-2 w-full">
+              <button onClick={exportCSV} className="w-full py-4 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 rounded-xl font-bold text-lg transition-colors text-indigo-400">
+                Esporta dati sessione (.CSV)
+              </button>
+              <button onClick={clearAllHistory} className="w-full py-4 bg-rose-950 hover:bg-rose-900 active:bg-rose-900/80 border border-rose-900 rounded-xl font-bold text-lg transition-colors text-rose-400">
+                Azzera Sessione
+              </button>
+            </div>
           )}
         </div>
       ) : (
         <div className="w-full max-w-md flex flex-col items-center">
+          {/* Barra contatori modificata con la rimozione del riquadro No-Rep numerico */}
           <section className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 flex justify-around mb-4 shadow-lg">
             <div className="text-center">
               <p className="text-xs uppercase tracking-wider text-slate-400">Rep valide</p>
@@ -188,7 +208,6 @@ export default function App() {
               </div>
             )}
 
-            {/* NUOVO BOTTONE FLUTTUANTE: Switch fotocamera in tempo reale (visibile solo se hardware compatibile) */}
             {hasMultipleCameras && !isLoading && !error && (
               <button
                 onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')}
@@ -202,38 +221,42 @@ export default function App() {
             )}
           </main>
 
+          {/* Footer semplificato con la rimozione del pulsante Azzera */}
           <footer className="w-full mt-4 flex gap-2">
-            <button onClick={() => setIsActive(false)} className="flex-1 py-3 bg-rose-950 hover:bg-rose-900 border border-rose-900 rounded-xl font-medium text-sm text-rose-400">
+            <button onClick={() => setIsActive(false)} className="w-full py-3 bg-rose-950 hover:bg-rose-900 border border-rose-900 rounded-xl font-medium text-sm text-rose-400">
               Ferma e cambia
             </button>
-            <button onClick={reset} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl font-medium text-sm text-slate-300">
-              Azzera
-            </button>
           </footer>
-
-          {sessionLogs.length > 0 && (
-            <section className="w-full mt-4 rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Ultime ripetizioni</h2>
-                <button onClick={exportCSV} className="text-xs font-semibold text-indigo-300 hover:text-indigo-200">
-                  CSV
-                </button>
-              </div>
-              <ol className="space-y-2">
-                {sessionLogs.slice(-5).reverse().map((log, index) => (
-                  <li key={`${log.timestamp}-${index}`} className="flex items-start justify-between gap-3 text-sm">
-                    <span className={log.esito === 'VALID_REP' ? 'text-emerald-300' : 'text-rose-300'}>
-                      {log.esito === 'VALID_REP' ? 'Valida' : 'No-rep'}
-                    </span>
-                    <span className="text-right text-slate-400">
-                      {log.errori === 'Nessuno' ? log.time : `${log.time} - ${log.errori}`}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          )}
         </div>
+      )}
+
+      {/* COMPONENTE STORICO GENERALE: Posizionato esternamente per essere visibile in entrambe le pagine */}
+      {sessionLogs.length > 0 && (
+        <section className="w-full max-w-md mt-8 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-lg">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Ultime ripetizioni (Sessione)</h2>
+            <span className="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded-md font-semibold border border-indigo-800">
+              {sessionLogs.length} Totali
+            </span>
+          </div>
+          <ol className="space-y-2">
+            {sessionLogs.slice(-5).reverse().map((log, index) => (
+              <li key={`${log.timestamp}-${index}`} className="flex items-start justify-between gap-3 text-sm border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {log.ex === 'SQUAT' ? 'Squat' : log.ex === 'DEADLIFT' ? 'Stacco' : 'Military'}
+                  </span>
+                  <span className={log.esito === 'VALID_REP' ? 'text-emerald-300 font-medium' : 'text-rose-300 font-medium'}>
+                    {log.esito === 'VALID_REP' ? 'Valida' : 'No-rep'}
+                  </span>
+                </div>
+                <span className="text-right text-xs text-slate-400 self-center">
+                  {log.errori === 'Nessuno' ? `${log.time} (${log.primaryAngle}°)` : `${log.time} - ${log.errori}`}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
     </div>
   );
