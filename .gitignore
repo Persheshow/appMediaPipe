@@ -7,11 +7,19 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-.github
+# Dipendenze e Build
 node_modules
 dist
 dist-ssr
+
+# Variabili d'Ambiente e Sicurezza locale
+.env
+.env.local
+.env.*.local
 *.local
+
+# Cache Deploy e Servizi Cloud
+.vercel
 
 # Editor directories and files
 .vscode/*

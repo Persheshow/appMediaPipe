@@ -1,7 +1,16 @@
+/**
+ * @file App.jsx
+ * @description Modulo principale dell'interfaccia utente per l'analisi cinematica.
+ * Gestisce lo stato globale dell'applicazione, l'acquisizione dei parametri utente, 
+ * l'interazione con il motore di Computer Vision (tramite usePose) e l'esportazione del dataset.
+ */
+
 import { useState, useEffect } from 'react';
 import { usePose } from './hooks/usePose';
 import logoUnifi from './assets/logo_unifi.png';
 
+// ── COSTANTI ──────────────────────────────────────────────────────────────────
+// Mappatura delle chiavi di stato ai nomi in chiaro per la UI
 const EXERCISE_LABELS = {
   SQUAT: 'Squat',
   DEADLIFT: 'Stacco da terra',
@@ -9,29 +18,54 @@ const EXERCISE_LABELS = {
 };
 
 export default function App() {
+  // ── STATO APPLICAZIONE ──────────────────────────────────────────────────────
+  // Variabili di configurazione dell'acquisizione
   const [exercise, setExercise] = useState('SQUAT');
   const [isActive, setIsActive] = useState(false);
   const [cameraSide, setCameraSide] = useState('LEFT');
-  const [facingMode, setFacingMode] = useState('user');
+  const [facingMode, setFacingMode] = useState('user'); // 'user' = frontale, 'environment' = posteriore
+
+  // Rilevamento hardware per abilitare lo switch dell'ottica
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
 
-  // Stato dello storico centralizzato nell'interfaccia principale
+  // Buffer locale per la memorizzazione dei dati telemetrici
   const [sessionLogs, setSessionLogs] = useState([]);
 
-  // Callback per registrare la ripetizione nello stato globale di App.jsx
+  // ── CALLBACKS E HOOKS CUSTOM ────────────────────────────────────────────────
+  /**
+   * Riceve in tempo reale i log generati dalla Macchina a Stati in `usePose`
+   * e li accoda al buffer di sessione per la futura esportazione.
+   */
   const handleNewLog = (newLog) => {
     setSessionLogs(prev => [...prev, newLog]);
   };
 
+  // Inizializzazione dell'hook che gestisce il motore MediaPipe e le logiche di rep
   const { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, faults, angles, reset } = usePose(
     exercise, isActive, cameraSide, facingMode, handleNewLog
   );
 
+  // ── STATO DERIVATO ──────────────────────────────────────────────────────────
   const exerciseLabel = EXERCISE_LABELS[exercise];
+  // Applica una trasformazione speculare al canvas e al video solo se si usa la fotocamera frontale
   const mirrorClass = facingMode === 'user' ? 'scale-x-[-1]' : '';
 
+  // ── EFFETTI HARDWARE ────────────────────────────────────────────────────────
   useEffect(() => {
+    /**
+     * Interroga l'API mediaDevices per contare le periferiche video disponibili.
+     */
     async function checkCameras() {
+      // BYPASS MOBILE: I browser iOS/Android (Safari/Chrome) nascondono l'hardware 
+      // restituendo un array falsato per policy di Anti-Fingerprinting prima 
+      // della concessione dei permessi. Essendo dispositivi mobili, assumiamo 
+      // strutturalmente la presenza di fotocamera frontale e posteriore.
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        setHasMultipleCameras(true);
+        return;
+      }
+
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -42,39 +76,54 @@ export default function App() {
       }
     }
     checkCameras();
-  }, []);
+  }, []); // Eseguito una sola volta al mount del componente
 
+  // ── GESTIONE DATI ED ESPORTAZIONE ───────────────────────────────────────────
+  /**
+   * Genera e scarica un file CSV compatibile con i principali software di analisi (Excel, MATLAB, R).
+   */
   const exportCSV = () => {
+    // Escaping di sicurezza per eventuali apici all'interno dei dati
     const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
     const headers = ['Ora', 'Esercizio', 'Esito', 'Errori'];
-    // Utilizzo del punto e virgola per la corretta incolonnazione in Excel locale
+
+    // Mappatura dell'array di oggetti in stringhe formattate con separatore ';'
     const rows = sessionLogs.map(log => [
       log.time,
       log.ex,
       log.esito,
       log.errori,
     ].map(escapeCSV).join(';')).join('\n');
-    // Aggiunta del carattere \uFEFF (BOM) per codificare correttamente i caratteri e le colonne
+
+    // Costruzione del file. L'inclusione di \uFEFF (Byte Order Mark) forza
+    // i software Microsoft a interpretare il file come UTF-8, garantendo l'incolonnamento.
     const csv = `\uFEFF${headers.map(escapeCSV).join(';')}\n${rows}`;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
+
+    // Simula un click su un anchor tag invisibile per forzare il download locale
     const link = document.createElement('a');
     link.setAttribute('href', url);
     link.setAttribute('download', `dataset_cinematica_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url); // Pulizia della memoria
   };
 
+  /**
+   * Resetta la dashboard in esecuzione e svuota il buffer dei dati di sessione.
+   */
   const clearAllHistory = () => {
     setSessionLogs([]);
     reset();
   };
 
+  // ── RENDER COMPONENTE ───────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white">
 
+      {/* HEADER ISTITUZIONALE */}
       <header className="w-full max-w-xl text-center flex flex-col items-center my-8">
         <img
           src={logoUnifi}
@@ -87,11 +136,13 @@ export default function App() {
         </h1>
       </header>
 
+      {/* VIEWPORT: FASE DI CONFIGURAZIONE (INATTIVA) */}
       {!isActive ? (
         <div className="w-full max-w-xl flex flex-col gap-6">
 
           <div className="bg-white border border-[#002f6c] rounded-none p-6 flex flex-col gap-8">
 
+            {/* SELETTORE ESERCIZIO */}
             <div className="flex flex-col gap-3">
               <h3 className="text-xs uppercase tracking-widest mb-1">1. Esercizio</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -110,6 +161,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* SELETTORE LATO DEL SOGGETTO */}
             <div className="flex flex-col gap-3">
               <h3 className="text-xs uppercase tracking-widest mb-1">2. Lato</h3>
               <div className="flex gap-2">
@@ -130,6 +182,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* SELETTORE OTTICA (Renderizzato solo in presenza di hardware multicamera) */}
             {hasMultipleCameras && (
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs uppercase tracking-widest mb-1">3. Selezione Fotocamera</h3>
@@ -158,8 +211,10 @@ export default function App() {
           </button>
         </div>
       ) : (
+        /* VIEWPORT: FASE DI ACQUISIZIONE DATI (ATTIVA) */
         <div className="w-full max-w-xl flex flex-col items-center">
 
+          {/* DASHBOARD TELEMETRICA */}
           <section className="w-full bg-white border border-[#002f6c] rounded-none p-4 flex justify-around mb-4">
             <div className="text-center w-1/3">
               <p className="text-[10px] uppercase tracking-widest mb-1">Ripetizioni Valide</p>
@@ -176,8 +231,10 @@ export default function App() {
             </div>
           </section>
 
+          {/* FLUSSO VIDEO E CANVAS DI RENDERING */}
           <main className="w-full relative bg-white rounded-none overflow-hidden border border-[#002f6c]" style={{ aspectRatio: '9/16' }}>
 
+            {/* OVERLAY: Inizializzazione Rete Neurale */}
             {isLoading && !error && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-10">
                 <div className="w-8 h-8 border-4 border-[#002f6c] border-t-transparent rounded-none animate-spin" />
@@ -185,12 +242,14 @@ export default function App() {
               </div>
             )}
 
+            {/* OVERLAY: Gestione Eccezioni (Es. Permessi negati) */}
             {error && <div className="absolute inset-0 flex items-center justify-center bg-white p-6 text-center text-sm z-30 border-4 border-[#002f6c] uppercase">{error}</div>}
 
+            {/* Elementi Media base sovrapposti */}
             <video ref={videoRef} className={`w-full h-full object-contain ${mirrorClass}`} playsInline muted />
             <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full object-contain ${mirrorClass}`} />
 
-            {/* OVERLAY ERRORE ESECUZIONE (visibile in tempo reale sopra la fotocamera) */}
+            {/* OVERLAY: Alert Errore Esecuzione (Motivo invalidazione rep) */}
             {faults.length > 0 && !isLoading && !error && (
               <div className="absolute top-16 left-1/2 -translate-x-1/2 w-[85%] bg-white border border-[#002f6c] p-2 text-center z-20 shadow-md">
                 <p className="text-[10px] uppercase tracking-widest mb-1">Errore</p>
@@ -198,6 +257,7 @@ export default function App() {
               </div>
             )}
 
+            {/* OVERLAY: Alert Mancata Acquisizione (Corpo fuori inquadratura o occluso) */}
             {isTrackingLost && !isLoading && !error && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#002f6c] text-white px-5 py-2.5 rounded-none text-xs tracking-widest flex items-center gap-2 border border-[#002f6c] uppercase z-20 w-max max-w-[90%]">
                 <span className="w-2 h-2 bg-white rounded-none animate-ping" />
@@ -205,6 +265,7 @@ export default function App() {
               </div>
             )}
 
+            {/* PULSANTE FLUTTUANTE: Switch fotocamera on-the-fly */}
             {hasMultipleCameras && !isLoading && !error && (
               <button
                 onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')}
@@ -226,8 +287,11 @@ export default function App() {
         </div>
       )}
 
+      {/* COMPONENTE CONDIVISO: REGISTRO ACQUISIZIONI */}
+      {/* Viene renderizzato solo se sono presenti dati nel buffer di sessione */}
       {sessionLogs.length > 0 && (
         <div className="w-full max-w-xl flex flex-col gap-6 mt-10 mb-8">
+
           <section className="bg-white border border-[#002f6c] rounded-none overflow-hidden">
             <div className="bg-white border-b border-[#002f6c] px-5 py-4 flex items-center justify-between">
               <h2 className="text-xs uppercase tracking-widest">Registro Acquisizioni</h2>
@@ -235,6 +299,8 @@ export default function App() {
                 TOTALE: {sessionLogs.length}
               </span>
             </div>
+
+            {/* Lista cronologica inversa: mostra solo gli ultimi 10 record */}
             <div className="flex flex-col">
               {sessionLogs.slice(-10).reverse().map((log, index) => (
                 <div key={`${log.timestamp}-${index}`} className="flex items-center justify-between px-5 py-3 text-sm border-b border-[#002f6c] last:border-b-0">
@@ -259,6 +325,8 @@ export default function App() {
                   </div>
                 </div>
               ))}
+
+              {/* Avviso di troncamento se i record eccedono il limite visivo */}
               {sessionLogs.length > 10 && (
                 <div className="px-5 py-3 text-center text-[10px] border-t border-[#002f6c] uppercase tracking-widest">
                   Visualizzati gli ultimi 10 record. Esporta in CSV per l'analisi completa.
@@ -267,6 +335,8 @@ export default function App() {
             </div>
           </section>
 
+          {/* PANNELLO DI ESPORTAZIONE E AZZERAMENTO */}
+          {/* Mostrato esclusivamente quando l'acquisizione video non è in corso */}
           {!isActive && (
             <div className="bg-white border border-[#002f6c] rounded-none p-4 flex flex-col gap-4">
               <div className="flex items-center justify-between px-2">
