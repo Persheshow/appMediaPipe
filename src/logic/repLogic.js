@@ -175,7 +175,7 @@ export function processSquat(state, landmarks, side) {
   const checkDepth = () => {
     // Usa OR (||) e un piccolo margine (-0.02) sulla Y. 
     // Il punto 'hip' di MediaPipe è leggermente più alto della piega reale dell'anca (hip crease) definita dall'IPF.
-    if (lm[hip].y > lm[knee].y - 0.02 || kneeAngle < cfg.bottomKnee) {
+    if (lm[hip].y > lm[knee].y + 0.005 || kneeAngle < cfg.bottomKnee - 2) {
       m.deepEnough = true;
     }
   };
