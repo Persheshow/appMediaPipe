@@ -3,7 +3,6 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
 import { EXERCISES } from '../config/exercises';
 
-// Aggiunto facingMode come quarto parametro
 export function usePose(exercise, isActive, cameraSide, facingMode) {
   // ── REFS ──────────────────────────────────────────────────────────────────
   const videoRef = useRef(null);
@@ -14,17 +13,18 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
   const isLoadingRef = useRef(true);
   const prevAnglesRef = useRef({ primary: null, secondary: null });
   const noLandmarkFrames = useRef(0);
-  const lastVideoTimeRef = useRef(-1); // Evita inferenze ridondanti
+  const lastVideoTimeRef = useRef(-1);
 
   // ── STATE ─────────────────────────────────────────────────────────────────
   const [isLoading, setIsLoading] = useState(true);
-  const [loadingMsg, setLoadingMsg] = useState('Caricamento modello...');
+  const [isTrackingLost, setIsTrackingLost] = useState(false); // NUOVO STATO WARNING
+  const [loadingMsg, setLoadingMsg] = useState('Caricamento modello AI...');
   const [error, setError] = useState(null);
   const [validReps, setValidReps] = useState(0);
   const [noReps, setNoReps] = useState(0);
   const [faults, setFaults] = useState([]);
   const [angles, setAngles] = useState({ primary: null, secondary: null });
-  const [sessionLogs, setSessionLogs] = useState([]); // LOG ESPORTAZIONE DATI
+  const [sessionLogs, setSessionLogs] = useState([]);
 
   // ── RESET ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -35,8 +35,9 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
     setNoReps(0);
     setFaults([]);
     setAngles({ primary: null, secondary: null });
-    setSessionLogs([]); // Svuota i log al cambio esercizio, lato o fotocamera
-  }, [exercise, isActive, cameraSide, facingMode]); // Aggiunto facingMode
+    setSessionLogs([]);
+    setIsTrackingLost(false); // Azzera il warning
+  }, [exercise, isActive, cameraSide, facingMode]);
 
   // ── CARICA MODELLO ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -76,8 +77,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: facingMode, // Usa il parametro dinamico passato da App.jsx
-            // Rimosse le restrizioni ideal width/height per evitare lo zoom del sensore
+            facingMode: facingMode,
           },
           audio: false,
         });
@@ -155,11 +155,18 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
         const results = landmarker.detectForVideo(video, performance.now());
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        if (isLoadingRef.current) {
+          setIsLoading(false); isLoadingRef.current = false;
+        }
+
         if (results.landmarks?.length > 0) {
           noLandmarkFrames.current = 0;
-          if (isLoadingRef.current) {
-            setIsLoading(false); setLoadingMsg('Caricamento modello...'); isLoadingRef.current = false;
-          }
+
+          // Spegne il warning se era attivo
+          setIsTrackingLost(prev => {
+            if (prev) return false;
+            return prev;
+          });
 
           const lms = results.landmarks[0];
 
@@ -176,7 +183,6 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
             prevAnglesRef.current = { primary: primaryAngle, secondary: secondaryAngle };
           }
 
-          // REGISTRAZIONE EVENTI E LOG CSV
           if (event?.type === 'VALID_REP' || event?.type === 'NO_REP') {
             const isValida = event.type === 'VALID_REP';
             if (isValida) { setValidReps(prev => prev + 1); setFaults([]); }
@@ -202,9 +208,13 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
           drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, cameraSide, exercise);
 
         } else {
+          // GESTIONE CORPO NON RILEVATO (NON BLOCCANTE)
           noLandmarkFrames.current++;
-          if (noLandmarkFrames.current > 30 && !isLoadingRef.current) {
-            setIsLoading(true); setLoadingMsg('Corpo non rilevato - inquadra tutto il corpo'); isLoadingRef.current = true;
+          if (noLandmarkFrames.current > 30) {
+            setIsTrackingLost(prev => {
+              if (!prev) return true;
+              return prev;
+            });
           }
         }
       }
@@ -212,7 +222,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
     }
     animFrameRef.current = requestAnimationFrame(loop);
     return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
-  }, [exercise, isActive, cameraSide, facingMode]); // Aggiunto facingMode
+  }, [exercise, isActive, cameraSide, facingMode]);
 
   function reset() {
     repStateRef.current = createInitialState();
@@ -222,8 +232,10 @@ export function usePose(exercise, isActive, cameraSide, facingMode) {
     setNoReps(0);
     setFaults([]);
     setAngles({ primary: null, secondary: null });
-    setSessionLogs([]); // Svuota i log al reset
+    setSessionLogs([]);
+    setIsTrackingLost(false);
   }
 
-  return { videoRef, canvasRef, isLoading, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset };
+  // Aggiunto isTrackingLost all'export
+  return { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset };
 }

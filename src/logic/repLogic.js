@@ -110,12 +110,21 @@ function checkTimeout(state) {
   }
 }
 
-// ── TRANSIZIONE DISCESA → RISALITA (media mobile 3 frame) ─────────────────────
+// ── TRANSIZIONE DISCESA → RISALITA (Finestra temporale) ───────────────────────
 function checkAscent(state, currentAngle) {
   state.lastAngleHistory.push(currentAngle);
-  if (state.lastAngleHistory.length > 3) state.lastAngleHistory.shift();
-  const avg = state.lastAngleHistory.reduce((a, b) => a + b, 0) / state.lastAngleHistory.length;
-  return avg > state.lastAngle + 5;
+  
+  // Manteniamo in memoria gli ultimi 5 frame (circa 80-150 millisecondi)
+  if (state.lastAngleHistory.length > 5) {
+    state.lastAngleHistory.shift();
+  }
+  
+  // Estraiamo l'angolo più vecchio nel buffer
+  const oldestAngle = state.lastAngleHistory[0];
+  
+  // Se l'angolo attuale è maggiore di 2 gradi rispetto a una frazione di secondo fa,
+  // l'atleta ha invertito la marcia e sta spingendo verso l'alto.
+  return currentAngle > oldestAngle + 2;
 }
 
 // ── GESTIONE OCCLUSIONE ────────────────────────────────────────────────────────

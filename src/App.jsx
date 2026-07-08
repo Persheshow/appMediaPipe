@@ -11,16 +11,12 @@ export default function App() {
   const [exercise, setExercise] = useState('SQUAT');
   const [isActive, setIsActive] = useState(false);
   const [cameraSide, setCameraSide] = useState('LEFT');
-  
-  // Nuovo stato: Selezione Fotocamera ('user' = frontale, 'environment' = posteriore)
   const [facingMode, setFacingMode] = useState('user');
 
-  // Passiamo facingMode all'hook
-  const { videoRef, canvasRef, isLoading, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset } = usePose(exercise, isActive, cameraSide, facingMode);
+  // Destruttura la nuova variabile isTrackingLost
+  const { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, noReps, faults, angles, sessionLogs, reset } = usePose(exercise, isActive, cameraSide, facingMode);
   
   const exerciseLabel = EXERCISE_LABELS[exercise];
-  
-  // Determina se specchiare il video (solo per la fotocamera frontale)
   const mirrorClass = facingMode === 'user' ? 'scale-x-[-1]' : '';
 
   const exportCSV = () => {
@@ -90,7 +86,6 @@ export default function App() {
             <p className="text-xs text-slate-500 mt-1 text-center">Indica da quale lato il telefono osserva l'atleta.</p>
           </div>
 
-          {/* NUOVA SEZIONE FOTOCAMERA */}
           <div className="flex flex-col gap-3">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-1">3. Lente Fotocamera</h2>
             <div className="flex gap-2">
@@ -158,17 +153,27 @@ export default function App() {
           )}
 
           <main className="w-full relative bg-black rounded-xl overflow-hidden border border-slate-800 shadow-2xl" style={{ aspectRatio: '9/16' }}>
+            
+            {/* CARICAMENTO INIZIALE */}
             {isLoading && !error && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 z-10">
                 <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                 <p className="text-xs text-slate-400 mt-3">{loadingMsg}</p>
               </div>
             )}
+            
             {error && <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4 text-center text-sm text-rose-400 z-20">{error}</div>}
 
-            {/* Aggiunta della classe dinamica per evitare di specchiare la fotocamera posteriore */}
             <video ref={videoRef} className={`w-full h-full object-contain ${mirrorClass}`} playsInline muted />
             <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full object-contain ${mirrorClass}`} />
+
+            {/* NUOVO WARNING NON BLOCCANTE */}
+            {isTrackingLost && !isLoading && !error && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-rose-900/90 border border-rose-500 text-white px-4 py-2 rounded-full text-xs font-bold tracking-wide shadow-lg z-20 flex items-center gap-2">
+                <span className="w-2 h-2 bg-rose-400 rounded-full animate-pulse" />
+                Corpo non rilevato
+              </div>
+            )}
           </main>
 
           <footer className="w-full mt-4 flex gap-2">
