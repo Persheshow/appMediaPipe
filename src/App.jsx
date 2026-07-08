@@ -1,8 +1,8 @@
 /**
  * @file App.jsx
  * @description Modulo principale dell'interfaccia utente per l'analisi cinematica.
- * Gestisce lo stato globale dell'applicazione, l'acquisizione dei parametri utente, 
- * l'interazione con il motore di Computer Vision (tramite usePose) e l'esportazione del dataset.
+ * Configura l'ambiente visivo accademico (Ateneo UniFI), gestisce l'esportazione
+ * del dataset strutturato in colonne per software statistici e centralizza il buffer di sessione.
  */
 
 import { useState, useEffect } from 'react';
@@ -10,7 +10,6 @@ import { usePose } from './hooks/usePose';
 import logoUnifi from './assets/logo_unifi.png';
 
 // ── COSTANTI ──────────────────────────────────────────────────────────────────
-// Mappatura delle chiavi di stato ai nomi in chiaro per la UI
 const EXERCISE_LABELS = {
   SQUAT: 'Squat',
   DEADLIFT: 'Stacco da terra',
@@ -19,47 +18,56 @@ const EXERCISE_LABELS = {
 
 export default function App() {
   // ── STATO APPLICAZIONE ──────────────────────────────────────────────────────
-  // Variabili di configurazione dell'acquisizione
   const [exercise, setExercise] = useState('SQUAT');
   const [isActive, setIsActive] = useState(false);
-  const [cameraSide, setCameraSide] = useState('LEFT');
   const [facingMode, setFacingMode] = useState('user'); // 'user' = frontale, 'environment' = posteriore
-
-  // Rilevamento hardware per abilitare lo switch dell'ottica
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
 
-  // Buffer locale per la memorizzazione dei dati telemetrici
+  // Buffer locale per lo storico di sessione condiviso e persistente
   const [sessionLogs, setSessionLogs] = useState([]);
 
-  // ── CALLBACKS E HOOKS CUSTOM ────────────────────────────────────────────────
-  /**
-   * Riceve in tempo reale i log generati dalla Macchina a Stati in `usePose`
-   * e li accoda al buffer di sessione per la futura esportazione.
-   */
+  // Rilevazione e scrittura asincrona nel buffer centralizzato
   const handleNewLog = (newLog) => {
     setSessionLogs(prev => [...prev, newLog]);
   };
 
-  // Inizializzazione dell'hook che gestisce il motore MediaPipe e le logiche di rep
+  // Inizializzazione dell'hook custom (Configurazione semplificata senza cameraSide)
   const { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, faults, angles, reset } = usePose(
-    exercise, isActive, cameraSide, facingMode, handleNewLog
+    exercise, isActive, facingMode, handleNewLog
   );
 
-  // ── STATO DERIVATO ──────────────────────────────────────────────────────────
   const exerciseLabel = EXERCISE_LABELS[exercise];
-  // Applica una trasformazione speculare al canvas e al video solo se si usa la fotocamera frontale
   const mirrorClass = facingMode === 'user' ? 'scale-x-[-1]' : '';
+
+  // ── GESTIONE TEMPORIZZATA DELL'OVERLAY DI ERRORE ────────────────────────────
+  const [visibleFaults, setVisibleFaults] = useState([]);
+
+  useEffect(() => {
+    // Se la Macchina a Stati rileva un errore, lo mostriamo e facciamo partire il timer
+    if (faults && faults.length > 0) {
+      setVisibleFaults(faults);
+
+      const timer = setTimeout(() => {
+        setVisibleFaults([]); // Nasconde l'alert dopo 3.5 secondi
+      }, 3500);
+
+      // Cleanup: se arriva un nuovo evento prima dello scadere del tempo, cancella il vecchio timer
+      return () => clearTimeout(timer);
+    } else {
+      // Se la ripetizione è valida, nascondiamo immediatamente eventuali errori precedenti
+      setVisibleFaults([]);
+    }
+  }, [faults]);
 
   // ── EFFETTI HARDWARE ────────────────────────────────────────────────────────
   useEffect(() => {
     /**
-     * Interroga l'API mediaDevices per contare le periferiche video disponibili.
+     * Interroga l'API per contare i moduli ottici fisici.
+     * Gestisce i vincoli di privacy dei sistemi operativi mobili.
      */
     async function checkCameras() {
-      // BYPASS MOBILE: I browser iOS/Android (Safari/Chrome) nascondono l'hardware 
-      // restituendo un array falsato per policy di Anti-Fingerprinting prima 
-      // della concessione dei permessi. Essendo dispositivi mobili, assumiamo 
-      // strutturalmente la presenza di fotocamera frontale e posteriore.
+      // BYPASS MOBILE: Forza la disponibilità multicamera se rileva architettura mobile,
+      // aggirando il blocco preventivo dei permessi (Anti-Fingerprinting) dei browser.
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (isMobile) {
         setHasMultipleCameras(true);
@@ -76,18 +84,19 @@ export default function App() {
       }
     }
     checkCameras();
-  }, []); // Eseguito una sola volta al mount del componente
+  }, []);
 
   // ── GESTIONE DATI ED ESPORTAZIONE ───────────────────────────────────────────
   /**
-   * Genera e scarica un file CSV compatibile con i principali software di analisi (Excel, MATLAB, R).
+   * Genera un tracciato CSV conforme, strutturando i campi in colonne distinte 
+   * tramite l'uso del delimitatore ';' e del marcatore UTF-8 BOM.
    */
   const exportCSV = () => {
-    // Escaping di sicurezza per eventuali apici all'interno dei dati
     const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+    // Intestazione formale modificata per riflettere il rilevamento automatico del lato
     const headers = ['Ora', 'Esercizio', 'Esito', 'Errori'];
 
-    // Mappatura dell'array di oggetti in stringhe formattate con separatore ';'
+    // Generazione delle righe mappando l'output
     const rows = sessionLogs.map(log => [
       log.time,
       log.ex,
@@ -95,25 +104,19 @@ export default function App() {
       log.errori,
     ].map(escapeCSV).join(';')).join('\n');
 
-    // Costruzione del file. L'inclusione di \uFEFF (Byte Order Mark) forza
-    // i software Microsoft a interpretare il file come UTF-8, garantendo l'incolonnamento.
+    // Iniezione del Byte Order Mark (\uFEFF) per l'allineamento automatico delle colonne in Excel
     const csv = `\uFEFF${headers.map(escapeCSV).join(';')}\n${rows}`;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-
-    // Simula un click su un anchor tag invisibile per forzare il download locale
     const link = document.createElement('a');
     link.setAttribute('href', url);
     link.setAttribute('download', `dataset_cinematica_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url); // Pulizia della memoria
+    URL.revokeObjectURL(url);
   };
 
-  /**
-   * Resetta la dashboard in esecuzione e svuota il buffer dei dati di sessione.
-   */
   const clearAllHistory = () => {
     setSessionLogs([]);
     reset();
@@ -123,7 +126,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white">
 
-      {/* HEADER ISTITUZIONALE */}
+      {/* HEADER UNIFI */}
       <header className="w-full max-w-xl text-center flex flex-col items-center my-8">
         <img
           src={logoUnifi}
@@ -136,7 +139,7 @@ export default function App() {
         </h1>
       </header>
 
-      {/* VIEWPORT: FASE DI CONFIGURAZIONE (INATTIVA) */}
+      {/* CAMERA INATTIVA*/}
       {!isActive ? (
         <div className="w-full max-w-xl flex flex-col gap-6">
 
@@ -144,7 +147,7 @@ export default function App() {
 
             {/* SELETTORE ESERCIZIO */}
             <div className="flex flex-col gap-3">
-              <h3 className="text-xs uppercase tracking-widest mb-1">1. Esercizio</h3>
+              <h3 className="text-xs uppercase tracking-widest mb-1">Esercizio</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {Object.entries(EXERCISE_LABELS).map(([key, label]) => (
                   <button
@@ -161,31 +164,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* SELETTORE LATO DEL SOGGETTO */}
-            <div className="flex flex-col gap-3">
-              <h3 className="text-xs uppercase tracking-widest mb-1">2. Lato</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setCameraSide('LEFT')}
-                  className={`flex-1 py-3 rounded-none text-sm transition-none border ${cameraSide === 'LEFT' ? 'bg-[#002f6c] text-white border-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
-                    }`}
-                >
-                  Sinistro
-                </button>
-                <button
-                  onClick={() => setCameraSide('RIGHT')}
-                  className={`flex-1 py-3 rounded-none text-sm transition-none border ${cameraSide === 'RIGHT' ? 'bg-[#002f6c] text-white border-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
-                    }`}
-                >
-                  Destro
-                </button>
-              </div>
-            </div>
-
-            {/* SELETTORE OTTICA (Renderizzato solo in presenza di hardware multicamera) */}
+            {/* SELETTORE FOTOCAMERA */}
             {hasMultipleCameras && (
               <div className="flex flex-col gap-3">
-                <h3 className="text-xs uppercase tracking-widest mb-1">3. Selezione Fotocamera</h3>
+                <h3 className="text-xs uppercase tracking-widest mb-1">2. Seleziona Fotocamera</h3>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setFacingMode('user')}
@@ -206,15 +188,26 @@ export default function App() {
             )}
           </div>
 
+          {/* ISTRUZIONI */}
+          <div className="bg-white border border-[#002f6c] rounded-none p-6 flex flex-col gap-3">
+            <h3 className="text-xs uppercase tracking-widest">Istruzioni</h3>
+            <ul className="list-disc list-outside text-sm space-y-2 ml-4">
+              <li>Posizionare il dispositivo al lato del soggetto.</li>
+              <li>Assicurarsi che l'intera figura, incluse mani e piedi, siano nell'inquadratura.</li>
+              <li>Garantire un elevato contrasto tra il soggetto e lo sfondo.</li>
+              <li>Mantenere il dispositivo stabile durante l'intera durata dell'acquisizione.</li>
+            </ul>
+          </div>
+
           <button onClick={() => setIsActive(true)} className="w-full py-4 bg-[#002f6c] hover:bg-white hover:text-[#002f6c] border border-[#002f6c] rounded-none text-lg text-white uppercase tracking-widest transition-none">
-            Inizia Sessione
+            Inizia
           </button>
         </div>
       ) : (
-        /* VIEWPORT: FASE DI ACQUISIZIONE DATI (ATTIVA) */
+        /* CAMERA ATTIVA */
         <div className="w-full max-w-xl flex flex-col items-center">
 
-          {/* DASHBOARD TELEMETRICA */}
+          {/* DASHBOARD NUMERICA */}
           <section className="w-full bg-white border border-[#002f6c] rounded-none p-4 flex justify-around mb-4">
             <div className="text-center w-1/3">
               <p className="text-[10px] uppercase tracking-widest mb-1">Ripetizioni Valide</p>
@@ -231,10 +224,9 @@ export default function App() {
             </div>
           </section>
 
-          {/* FLUSSO VIDEO E CANVAS DI RENDERING */}
-          <main className="w-full relative bg-white rounded-none overflow-hidden border border-[#002f6c]" style={{ aspectRatio: '9/16' }}>
+          {/* INQUADRATURA E OVERLAYS DI STATO */}
+          <main className="w-full relative min-h-[50vh] bg-white rounded-none overflow-hidden border border-[#002f6c]">
 
-            {/* OVERLAY: Inizializzazione Rete Neurale */}
             {isLoading && !error && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-10">
                 <div className="w-8 h-8 border-4 border-[#002f6c] border-t-transparent rounded-none animate-spin" />
@@ -242,22 +234,20 @@ export default function App() {
               </div>
             )}
 
-            {/* OVERLAY: Gestione Eccezioni (Es. Permessi negati) */}
             {error && <div className="absolute inset-0 flex items-center justify-center bg-white p-6 text-center text-sm z-30 border-4 border-[#002f6c] uppercase">{error}</div>}
 
-            {/* Elementi Media base sovrapposti */}
-            <video ref={videoRef} className={`w-full h-full object-contain ${mirrorClass}`} playsInline muted />
-            <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full object-contain ${mirrorClass}`} />
+            <video ref={videoRef} className={`w-full h-auto block ${mirrorClass}`} playsInline muted />
+            <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full ${mirrorClass}`} />
 
-            {/* OVERLAY: Alert Errore Esecuzione (Motivo invalidazione rep) */}
-            {faults.length > 0 && !isLoading && !error && (
-              <div className="absolute top-16 left-1/2 -translate-x-1/2 w-[85%] bg-white border border-[#002f6c] p-2 text-center z-20 shadow-md">
-                <p className="text-[10px] uppercase tracking-widest mb-1">Errore</p>
-                <p className="text-xs uppercase tracking-widest">{faults.join(' • ')}</p>
+            {/* ERROR OVERLAY */}
+            {visibleFaults.length > 0 && !isLoading && !error && (
+              <div className="absolute top-8 left-1/2 -translate-x-1/2 w-[85%] bg-white border border-[#002f6c] p-2 text-center z-20">
+                <p className="text-[10px] text-[#002f6c] uppercase tracking-widest mb-1">Esecuzione non Valida</p>
+                <p className="text-xs text-[#002f6c] uppercase tracking-widest">{visibleFaults.join(' • ')}</p>
               </div>
             )}
 
-            {/* OVERLAY: Alert Mancata Acquisizione (Corpo fuori inquadratura o occluso) */}
+            {/* TRACKING OVERLAY */}
             {isTrackingLost && !isLoading && !error && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#002f6c] text-white px-5 py-2.5 rounded-none text-xs tracking-widest flex items-center gap-2 border border-[#002f6c] uppercase z-20 w-max max-w-[90%]">
                 <span className="w-2 h-2 bg-white rounded-none animate-ping" />
@@ -265,7 +255,7 @@ export default function App() {
               </div>
             )}
 
-            {/* PULSANTE FLUTTUANTE: Switch fotocamera on-the-fly */}
+            {/* BOTTONE FLUTTUANTE: Cambio camera on-the-fly */}
             {hasMultipleCameras && !isLoading && !error && (
               <button
                 onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')}
@@ -287,11 +277,11 @@ export default function App() {
         </div>
       )}
 
-      {/* COMPONENTE CONDIVISO: REGISTRO ACQUISIZIONI */}
-      {/* Viene renderizzato solo se sono presenti dati nel buffer di sessione */}
+      {/* SEZIONE STORICO */}
       {sessionLogs.length > 0 && (
         <div className="w-full max-w-xl flex flex-col gap-6 mt-10 mb-8">
 
+          {/* COMPONENTE REGISTRO */}
           <section className="bg-white border border-[#002f6c] rounded-none overflow-hidden">
             <div className="bg-white border-b border-[#002f6c] px-5 py-4 flex items-center justify-between">
               <h2 className="text-xs uppercase tracking-widest">Registro Acquisizioni</h2>
@@ -299,8 +289,6 @@ export default function App() {
                 TOTALE: {sessionLogs.length}
               </span>
             </div>
-
-            {/* Lista cronologica inversa: mostra solo gli ultimi 10 record */}
             <div className="flex flex-col">
               {sessionLogs.slice(-10).reverse().map((log, index) => (
                 <div key={`${log.timestamp}-${index}`} className="flex items-center justify-between px-5 py-3 text-sm border-b border-[#002f6c] last:border-b-0">
@@ -325,8 +313,6 @@ export default function App() {
                   </div>
                 </div>
               ))}
-
-              {/* Avviso di troncamento se i record eccedono il limite visivo */}
               {sessionLogs.length > 10 && (
                 <div className="px-5 py-3 text-center text-[10px] border-t border-[#002f6c] uppercase tracking-widest">
                   Visualizzati gli ultimi 10 record. Esporta in CSV per l'analisi completa.
@@ -335,8 +321,7 @@ export default function App() {
             </div>
           </section>
 
-          {/* PANNELLO DI ESPORTAZIONE E AZZERAMENTO */}
-          {/* Mostrato esclusivamente quando l'acquisizione video non è in corso */}
+          {/* PANNELLO GESTIONE ACQUISIZIONI */}
           {!isActive && (
             <div className="bg-white border border-[#002f6c] rounded-none p-4 flex flex-col gap-4">
               <div className="flex items-center justify-between px-2">

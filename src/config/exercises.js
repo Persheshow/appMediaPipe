@@ -39,10 +39,10 @@ export const EXERCISES = {
  * Allineata rigidamente alle linee guida visive dell'Ateneo (Bianco e Blu UniFI).
  */
 export const SKELETON_COLORS = {
-  target: '#002f6c',  // Blu Istituzionale UniFI - Obiettivo cinematico raggiunto
+  target: '#ffffff',  // Bianco - Tracciamento target (Alto contrasto sul video)
   active: '#ffffff',  // Bianco - Tracciamento standard in movimento (Alto contrasto sul video)
-  warning: '#002f6c',  // (Riservato - Mappato su colore primario per coerenza)
-  error: '#ffffff',  // (Riservato - Mappato su colore secondario per coerenza)
+  warning: '#6c0000',  // Rosso - Avviso (Riservato - Mappato su colore primario per coerenza)
+  error: '#ffffff',  // Bianco - Errore (Riservato - Mappato su colore secondario per coerenza)
 };
 
 /**

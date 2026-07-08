@@ -2,15 +2,17 @@
  * @file usePose.js
  * @description Hook custom React per l'integrazione del modello di Computer Vision MediaPipe.
  * Gestisce l'acquisizione del flusso video, l'allocazione in memoria della rete neurale (WASM),
- * l'elaborazione frame-by-frame (inferenza) e la sincronizzazione con la logica di validazione cinematica.
+ * l'elaborazione frame-by-frame (inferenza) con auto-rilevamento del lato corporeo,
+ * e la sincronizzazione con la logica di validazione cinematica.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
-import { EXERCISES } from '../config/exercises';
+import { EXERCISES, SKELETON_COLORS } from '../config/exercises';
 
-export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
+// Rimossa la variabile statica 'cameraSide' dai parametri di ingresso
+export function usePose(exercise, isActive, facingMode, onNewLog) {
   // ── RIFERIMENTI MUTABILI (REFS) ────────────────────────────────────────────
   // Utilizzati per mantenere lo stato all'interno del loop di animazione (60 FPS)
   // senza scatenare continui e onerosi re-render del DOM da parte di React.
@@ -36,8 +38,8 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
   const [angles, setAngles] = useState({ primary: null, secondary: null });
 
   // ── RESET DEI CONTATORI LOCALI ──────────────────────────────────────────────
-  // Si attiva ogni volta che l'utente cambia esercizio, lato o fotocamera,
-  // garantendo che la Macchina a Stati parta da un foglio pulito.
+  // Si attiva ogni volta che l'utente cambia esercizio o fotocamera,
+  // garantendo che la Macchina a Stati parta da un contesto pulito.
   useEffect(() => {
     repStateRef.current = createInitialState();
     prevAnglesRef.current = { primary: null, secondary: null };
@@ -47,7 +49,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
     setFaults([]);
     setAngles({ primary: null, secondary: null });
     setIsTrackingLost(false);
-  }, [exercise, isActive, cameraSide, facingMode]);
+  }, [exercise, isActive, facingMode]);
 
   // ── INIZIALIZZAZIONE DELLA RETE NEURALE ─────────────────────────────────────
   // Carica il modello MediaPipe Pose Lite in memoria sfruttando WebAssembly (WASM).
@@ -113,24 +115,47 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
   }, [isActive, facingMode]);
 
   // ── PIPELINE DI ELABORAZIONE (MAIN LOOP) ────────────────────────────────────
-  // Questo hook gestisce il ciclo continuo di analisi dei frame video.
   useEffect(() => {
     if (!isActive) return;
 
     /**
+     * @function detectCameraSide
+     * @description Algoritmo euristico per l'auto-rilevamento del profilo esposto.
+     * Analizza la confidenza (visibility) e la profondità relativa nello spazio (Z-buffer)
+     * delle articolazioni chiave (Spalla, Anca, Ginocchio) per decidere se l'atleta è inquadrato
+     * da sinistra o da destra, eliminando la necessità di configurazione manuale.
+     */
+    function detectCameraSide(landmarks) {
+      // Somma della confidenza di tracciamento (MediaPipe indices: 11,23,25 per SX | 12,24,26 per DX)
+      const leftVis = landmarks[11].visibility + landmarks[23].visibility + landmarks[25].visibility;
+      const rightVis = landmarks[12].visibility + landmarks[24].visibility + landmarks[26].visibility;
+
+      // Somma delle coordinate di profondità relative (Z-index minore = più vicino alla lente)
+      const leftZ = landmarks[11].z + landmarks[23].z + landmarks[25].z;
+      const rightZ = landmarks[12].z + landmarks[24].z + landmarks[26].z;
+
+      // Un profilo è dominante se mostra una visibilità significativamente maggiore o una vicinanza spaziale coerente
+      if (leftVis > rightVis + 0.2 && leftZ < rightZ) return 'LEFT';
+      if (rightVis > leftVis + 0.2 && rightZ < leftZ) return 'RIGHT';
+
+      // Fallback deterministico di sicurezza basato unicamente sul punteggio di visibilità assoluta
+      return leftVis >= rightVis ? 'LEFT' : 'RIGHT';
+    }
+
+    /**
      * @function drawSkeleton
      * @description Renderizza un overlay topologico (scheletro) sul canvas HTML.
-     * I colori indicano dinamicamente il raggiungimento dei target cinematici (es. parallelo).
+     * I colori sono estratti dal file di configurazione istituzionale dell'Ateneo.
      */
     function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex) {
-      const color = isTargetReached ? '#00ff88' : '#c084fc'; // Verde (Target ok), Viola (Tracking)
+      const color = isTargetReached ? SKELETON_COLORS.target : SKELETON_COLORS.active;
       ctx.lineWidth = 5;
       ctx.strokeStyle = color;
 
       const lmConfig = EXERCISES[ex]?.landmarks[side];
       if (!lmConfig) return;
 
-      // Definizione dei segmenti ossei da renderizzare in base all'esercizio
+      // Definizione dei segmenti ossei da renderizzare in base all'esercizio e al lato auto-rilevato
       const baseConnections = [[lmConfig.shoulder, lmConfig.hip], [lmConfig.hip, lmConfig.knee], [lmConfig.knee, lmConfig.ankle]];
       const armConnections = (ex === 'OVERHEAD_PRESS' || ex === 'DEADLIFT') && lmConfig.elbow
         ? [[lmConfig.shoulder, lmConfig.elbow], [lmConfig.elbow, lmConfig.wrist]] : [];
@@ -150,7 +175,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
         const p = landmarks[idx];
         if (p && p.visibility > 0.4) {
           ctx.beginPath();
-          ctx.fillStyle = isTargetReached ? '#00ff88' : '#ffffff';
+          ctx.fillStyle = isTargetReached ? SKELETON_COLORS.target : SKELETON_COLORS.active;
           ctx.arc(p.x * w, p.y * h, 6, 0, 2 * Math.PI); ctx.fill();
         }
       });
@@ -166,7 +191,6 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
       const canvas = canvasRef.current;
       const landmarker = landmarkerRef.current;
 
-      // Esecuzione subordinata alla disponibilità di tutte le risorse
       if (video && canvas && landmarker && video.readyState >= 2) {
 
         // Evita sprechi computazionali se il frame video è identico al precedente
@@ -199,14 +223,16 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
 
           const lms = results.landmarks[0]; // Array di 33 landmark (x, y, z, visibility)
 
+          // Esecuzione dell'algoritmo di auto-detection sul frame corrente
+          const dynamicSide = detectCameraSide(lms);
+
           // 2. ELABORAZIONE LOGICA: Delega dell'analisi geometrica alla Macchina a Stati (FSM)
           const { state, event, primaryAngle, secondaryAngle, isTarget } = processFrame(
-            exercise, repStateRef.current, lms, cameraSide
+            exercise, repStateRef.current, lms, dynamicSide
           );
           repStateRef.current = state; // Persistenza dello stato logico per il frame successivo
 
           // 3. AGGIORNAMENTO UI: Trasmette i nuovi angoli allo stato React solo se variati di > 1°
-          // (Questo riduce drasticamente il carico sulla CPU evitando re-render inutili)
           if (
             Math.abs((primaryAngle ?? 0) - (prevAnglesRef.current.primary ?? 0)) > 1 ||
             Math.abs((secondaryAngle ?? 0) - (prevAnglesRef.current.secondary ?? 0)) > 1
@@ -219,19 +245,18 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
           if (event?.type === 'VALID_REP' || event?.type === 'NO_REP') {
             const isValida = event.type === 'VALID_REP';
 
-            // Aggiornamento dei contatori globali
             if (isValida) { setValidReps(prev => prev + 1); setFaults([]); }
             else { setNoReps(prev => prev + 1); setFaults(event.faults); }
 
             const timestamp = new Date();
 
-            // Creazione e invio del record dati al componente padre (App.jsx) per l'export CSV
+            // Invio del record dati al componente padre (App.jsx) includendo il lato rilevato dall'AI
             if (onNewLog) {
               onNewLog({
                 timestamp: timestamp.toISOString(),
                 time: timestamp.toLocaleTimeString('it-IT', { hour12: false }),
                 ex: exercise,
-                side: cameraSide,
+                side: dynamicSide, // Salvato nel log per l'esportazione analitica
                 esito: event.type,
                 primaryAngle: primaryAngle === null ? '' : Math.round(primaryAngle),
                 finalState: state.movementState,
@@ -241,7 +266,7 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
           }
 
           // 5. RENDERING OVERLAY GRAFICO
-          drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, cameraSide, exercise);
+          drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, dynamicSide, exercise);
 
         } else {
           // Soggetto NON rilevato: incremento del contatore
@@ -252,16 +277,12 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
           }
         }
       }
-      // Richiesta di pianificazione del prossimo frame
       animFrameRef.current = requestAnimationFrame(loop);
     }
 
-    // Innesco iniziale del loop di animazione
     animFrameRef.current = requestAnimationFrame(loop);
-
-    // Cleanup: interruzione del ciclo di rendering alla disattivazione del sensore
     return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
-  }, [exercise, isActive, cameraSide, facingMode]); // Dipendenze che causano il riavvio del loop
+  }, [exercise, isActive, facingMode]);
 
   /**
    * @function reset
@@ -278,6 +299,5 @@ export function usePose(exercise, isActive, cameraSide, facingMode, onNewLog) {
     setIsTrackingLost(false);
   }
 
-  // Interfaccia pubblica dell'hook
   return { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, noReps, faults, angles, reset };
 }
