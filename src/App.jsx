@@ -281,7 +281,7 @@ export default function App() {
 
           <footer className="w-full mt-6">
             <button onClick={() => setIsActive(false)} className="w-full py-4 bg-white hover:bg-[#002f6c] hover:text-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none">
-              Interrompi
+              Indietro
             </button>
           </footer>
         </div>
