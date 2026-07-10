@@ -31,7 +31,7 @@ export default function App() {
     setSessionLogs(prev => [...prev, newLog]);
   };
 
-  // Inizializzazione dell'hook custom (Configurazione semplificata senza cameraSide)
+  // Inizializzazione dell'hook custom
   const { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, faults, angles, reset } = usePose(
     exercise, isActive, facingMode, handleNewLog
   );
@@ -59,15 +59,56 @@ export default function App() {
     }
   }, [faults]);
 
+  // ── GESTIONE EFFETTO ACUSTICO E NOTIFICA DELLE RIPETIZIONI VALIDE ───────────
+  const [validNotification, setValidNotification] = useState(null);
+
+  /**
+   * Genera sinteticamente un segnale acustico bipolare ad alta frequenza.
+   * Utilizza le funzioni native Web Audio API per evitare l'uso di risorse multimediali esterne.
+   */
+  const playValidationSound = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      const audioCtx = new AudioContext();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.type = 'sine'; // Onda sinusoidale per un tono puro privo di distorsioni
+      oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // Nota Re5 (D5)
+
+      // Controllo dell'inviluppo di ampiezza per evitare clic digitali transitori
+      gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.25); // Durata totale dell'impulso: 250 millisecondi
+    } catch (e) {
+      console.warn("Esecuzione del flusso audio interrotta dalle restrizioni del browser:", e);
+    }
+  };
+
+  useEffect(() => {
+    // Monitora l'incremento numerico del contatore delle ripetizioni valide
+    if (validReps > 0) {
+      playValidationSound();
+      setValidNotification(`Ripetizione ${validReps} Valida`);
+
+      const notificationTimer = setTimeout(() => {
+        setValidNotification(null); // Rimozione dell'overlay ridotta a 1.2 secondi (flash)
+      }, 1200);
+
+      return () => clearTimeout(notificationTimer);
+    }
+  }, [validReps]);
+
   // ── EFFETTI HARDWARE ────────────────────────────────────────────────────────
   useEffect(() => {
-    /**
-     * Interroga l'API per contare i moduli ottici fisici.
-     * Gestisce i vincoli di privacy dei sistemi operativi mobili.
-     */
     async function checkCameras() {
-      // BYPASS MOBILE: Forza la disponibilità multicamera se rileva architettura mobile,
-      // aggirando il blocco preventivo dei permessi (Anti-Fingerprinting) dei browser.
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (isMobile) {
         setHasMultipleCameras(true);
@@ -87,24 +128,18 @@ export default function App() {
   }, []);
 
   // ── GESTIONE DATI ED ESPORTAZIONE ───────────────────────────────────────────
-  /**
-   * Genera un tracciato CSV conforme, strutturando i campi in colonne distinte 
-   * tramite l'uso del delimitatore ';' e del marcatore UTF-8 BOM.
-   */
   const exportCSV = () => {
     const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    // Intestazione formale modificata per riflettere il rilevamento automatico del lato
-    const headers = ['Ora', 'Esercizio', 'Esito', 'Errori'];
+    const headers = ['Ora', 'Esercizio', 'Lato Rilevato', 'Esito', 'Errori'];
 
-    // Generazione delle righe mappando l'output
     const rows = sessionLogs.map(log => [
       log.time,
       log.ex,
+      log.side === 'LEFT' ? 'Sinistro' : 'Destro',
       log.esito,
       log.errori,
     ].map(escapeCSV).join(';')).join('\n');
 
-    // Iniezione del Byte Order Mark (\uFEFF) per l'allineamento automatico delle colonne in Excel
     const csv = `\uFEFF${headers.map(escapeCSV).join(';')}\n${rows}`;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -139,7 +174,7 @@ export default function App() {
         </h1>
       </header>
 
-      {/* CAMERA INATTIVA*/}
+      {/* VIEWPORT INATTIVA: CONFIGURAZIONE PARAMETRI ESPERIMENTO */}
       {!isActive ? (
         <div className="w-full max-w-xl flex flex-col gap-6">
 
@@ -164,7 +199,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* SELETTORE FOTOCAMERA */}
+            {/* SELETTORE OTTICA */}
             {hasMultipleCameras && (
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs uppercase tracking-widest mb-1">2. Seleziona Fotocamera</h3>
@@ -204,7 +239,7 @@ export default function App() {
           </button>
         </div>
       ) : (
-        /* CAMERA ATTIVA */
+        /* VIEWPORT ATTIVA: TELEMETRIA E ACQUISIZIONE VIDEO */
         <div className="w-full max-w-xl flex flex-col items-center">
 
           {/* DASHBOARD NUMERICA */}
@@ -247,6 +282,18 @@ export default function App() {
               </div>
             )}
 
+            {/* NOTIFICA RIPETIZIONE VALIDA (Restyling minimalista senza sfondo ingombrante) */}
+            {validNotification && !isLoading && !error && (
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center gap-1 pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={4} stroke="#07c304" className="w-16 h-16 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                <span className="bg-[#002f6c]/90 text-white px-3 py-1 text-[10px] uppercase tracking-widest font-mono border border-white/20 shadow-md">
+                  {validNotification}
+                </span>
+              </div>
+            )}
+
             {/* TRACKING OVERLAY */}
             {isTrackingLost && !isLoading && !error && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#002f6c] text-white px-5 py-2.5 rounded-none text-xs tracking-widest flex items-center gap-2 border border-[#002f6c] uppercase z-20 w-max max-w-[90%]">
@@ -268,18 +315,12 @@ export default function App() {
               </button>
             )}
           </main>
-
-          <footer className="w-full mt-6">
-            <button onClick={() => setIsActive(false)} className="w-full py-4 bg-white hover:bg-[#002f6c] hover:text-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none">
-              Indietro
-            </button>
-          </footer>
         </div>
       )}
 
-      {/* SEZIONE STORICO */}
+      {/* SEZIONE STORICO: BUFFER CONDIVISO PERSISTENTE TRA GLI ESERCIZI */}
       {sessionLogs.length > 0 && (
-        <div className="w-full max-w-xl flex flex-col gap-6 mt-10 mb-8">
+        <div className={`w-full max-w-xl flex flex-col gap-6 mt-8 ${!isActive ? 'mb-8' : ''}`}>
 
           {/* COMPONENTE REGISTRO */}
           <section className="bg-white border border-[#002f6c] rounded-none overflow-hidden">
@@ -339,6 +380,16 @@ export default function App() {
           )}
         </div>
       )}
+
+      {/* FOOTER FASE ATTIVA: Pulsante Indietro spostato al fondo della vista globale */}
+      {isActive && (
+        <footer className="w-full max-w-xl mt-6 mb-8">
+          <button onClick={() => setIsActive(false)} className="w-full py-4 bg-white hover:bg-[#002f6c] hover:text-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none">
+            Indietro
+          </button>
+        </footer>
+      )}
+
     </div>
   );
 }
