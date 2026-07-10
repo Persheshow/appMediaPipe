@@ -1,8 +1,6 @@
 /**
  * @file repLogic.js
  * @description Modulo matematico e logico per l'analisi biomeccanica delle alzate.
- * Implementa Macchine a Stati Finiti (FSM) specifiche per ogni esercizio, elaborando
- * le coordinate 3D fornite da MediaPipe per determinare la validità del movimento.
  */
 
 import { EXERCISES, SMOOTHING } from '../config/exercises.js';
@@ -130,8 +128,8 @@ export function processSquat(state, landmarks, side) {
 
   if (!isVisible) {
     const { shouldReset } = handleOcclusion(state, 'SQUAT');
-    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0 };
-    return { state, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0 };
+    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0, targetProgress: 0 };
+    return { state, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0, targetProgress: 0 };
   }
   state.occludedSince = null;
   checkTimeout(state);
@@ -142,10 +140,18 @@ export function processSquat(state, landmarks, side) {
   const m = state.metrics;
   let event = null;
 
-  const totalRange = cfg.topKnee - (cfg.bottomKnee - 2);
-  const currentDisplacement = cfg.topKnee - kneeAngle;
+  // 1. Definiamo il Range of Motion Assoluto (Da 160° fino a un profondo 60°)
+  const maxKnee = cfg.topKnee;
+  const minKnee = 60;
+  const totalRange = maxKnee - minKnee;
+
+  // 2. Calcolo riempimento barra in percentuale assoluta
+  const currentDisplacement = maxKnee - kneeAngle;
   let progress = (currentDisplacement / totalRange) * 100;
   progress = Math.max(0, Math.min(100, progress));
+
+  // 3. Calcolo dell'altezza fissa della tacca del parallelo sulla barra
+  const targetProgress = ((maxKnee - cfg.bottomKnee) / totalRange) * 100;
 
   const checkDepth = () => {
     const isBelowParallel = lm[hip].y > lm[knee].y || kneeAngle < cfg.bottomKnee;
@@ -179,13 +185,19 @@ export function processSquat(state, landmarks, side) {
     }
   }
 
-  if (m.deepEnough) progress = 100;
   state.lastAngle = kneeAngle;
 
-  return { state, event, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: m.deepEnough, progress };
+  return {
+    state, event,
+    primaryAngle: kneeAngle,
+    secondaryAngle: state.smoothedSecondary,
+    isTarget: m.deepEnough,
+    progress,
+    targetProgress // Nuova proprietà inviata al renderer
+  };
 }
 
-// ── MOTORI DI INFERENZA: STACCO DA TERRA (DEADLIFT) ────────────────────────────
+// ── MOTORI DI INFERENZA: STACCO DA TERRA E PRESSA ──────────────────────────────
 export function processDeadlift(state, landmarks, side) {
   const cfg = EXERCISES.DEADLIFT.thresholds;
   const { shoulder: shoulderIdx, hip, knee, ankle, wrist } = EXERCISES.DEADLIFT.landmarks[side];
@@ -262,17 +274,12 @@ export function processDeadlift(state, landmarks, side) {
   return { state, event, primaryAngle: hipAngle, secondaryAngle: kneeAngle, isTarget: isErect };
 }
 
-// ── MOTORI DI INFERENZA: MILITARY PRESS (OVERHEAD PRESS) ───────────────────────
 export function processOverheadPress(state, landmarks, side) {
   const cfg = EXERCISES.OVERHEAD_PRESS.thresholds;
   const { shoulder: shoulderIdx, elbow: elbowIdx, wrist, hip, knee, ankle } = EXERCISES.OVERHEAD_PRESS.landmarks[side];
   const lm = landmarks;
 
-  const isVisible =
-    lm[shoulderIdx] && lm[shoulderIdx].visibility > 0.25 &&
-    lm[hip] && lm[hip].visibility > 0.3 &&
-    lm[knee] && lm[knee].visibility > 0.3 &&
-    lm[ankle] && lm[ankle].visibility > 0.3;
+  const isVisible = lm[shoulderIdx]?.visibility > 0.25 && lm[hip]?.visibility > 0.3 && lm[knee]?.visibility > 0.3 && lm[ankle]?.visibility > 0.3;
 
   if (!isVisible) {
     const { shouldReset } = handleOcclusion(state, 'OVERHEAD_PRESS');

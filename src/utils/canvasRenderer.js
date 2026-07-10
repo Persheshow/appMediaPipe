@@ -1,19 +1,15 @@
 /**
  * @file canvasRenderer.js
  * @description Modulo per il rendering grafico degli overlay topologici sul Canvas HTML.
- * Isola i compiti di disegno a basso livello dall'elaborazione logico-strutturale dei dati.
  */
 
 import { EXERCISES, SKELETON_COLORS } from '../config/exercises';
 
-/**
- * Disegna i segmenti ossei principali dell'esoscheletro corporeo.
- */
 export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, faultsSize) {
     let color = SKELETON_COLORS.active;
 
     if (faultsSize > 0) {
-        color = SKELETON_COLORS.warning; // Priorità: Rosso se viene rilevato un errore attivo
+        color = SKELETON_COLORS.warning;
     } else if (isTargetReached) {
         color = SKELETON_COLORS.target;
     }
@@ -36,11 +32,10 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, fa
         }
     });
 
-    // Rendering del nodo articolare dell'Anca con inversione cromatica controllata
     const hipPoint = landmarks[lmConfig.hip];
     if (hipPoint && hipPoint.visibility > 0.4) {
         ctx.beginPath();
-        ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444'; // Verde se sotto il parallelo, altrimenti rosso
+        ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
         ctx.arc(hipPoint.x * w, hipPoint.y * h, 6, 0, 2 * Math.PI);
         ctx.fill();
         ctx.lineWidth = 2;
@@ -50,11 +45,10 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, fa
 }
 
 /**
- * Gestisce l'overlay specifico per l'analisi dello Squat (Barra progressi e linea di rottura).
+ * Gestisce l'overlay specifico per l'analisi dello Squat con indicatore di target intermedio.
  */
-export function drawSquatOverlays(ctx, w, h, kneePoint, progress, isTargetReached, smoothedKneeYRef) {
+export function drawSquatOverlays(ctx, w, h, kneePoint, progress, targetProgress, isTargetReached, smoothedKneeYRef) {
     if (kneePoint && kneePoint.visibility > 0.4) {
-        // Filtraggio EMA interno per azzerare le oscillazioni (jittering) della linea verde del ginocchio
         if (smoothedKneeYRef.current === null) {
             smoothedKneeYRef.current = kneePoint.y;
         } else {
@@ -70,24 +64,35 @@ export function drawSquatOverlays(ctx, w, h, kneePoint, progress, isTargetReache
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#00ff88';
         ctx.stroke();
-        ctx.setLineDash([]); // Ripristino
+        ctx.setLineDash([]);
     }
 
-    // Sincronizzazione grafica della barra di ampiezza verticale
-    if (progress !== undefined) {
+    if (progress !== undefined && targetProgress !== undefined) {
         const barW = 10;
         const barH = h * 0.3;
         const barX = w - barW - 15;
         const barY = (h - barH) / 2;
 
+        // Sfondo della barra (Range of Motion Totale)
         ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
         ctx.fillRect(barX, barY, barW, barH);
+
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         ctx.strokeRect(barX, barY, barW, barH);
 
+        // Livello di riempimento (Diventa verde se l'atleta rompe il parallelo, altrimenti è bianco)
         const fillH = (progress / 100) * barH;
-        ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
+        ctx.fillStyle = isTargetReached ? '#00ff88' : '#ffffff';
         ctx.fillRect(barX, barY + barH - fillH, barW, fillH);
+
+        // Tacca Verde orizzontale fissa: Indica il "Parallelo" da raggiungere
+        const targetY = barY + barH - ((targetProgress / 100) * barH);
+        ctx.beginPath();
+        ctx.moveTo(barX - 4, targetY);
+        ctx.lineTo(barX + barW + 4, targetY);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#00ff88';
+        ctx.stroke();
     }
 }

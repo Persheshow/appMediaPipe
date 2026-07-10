@@ -1,9 +1,6 @@
 /**
  * @file usePose.js
  * @description Hook custom React per l'integrazione del modello di Computer Vision MediaPipe.
- * Gestisce l'acquisizione del flusso video, l'allocazione in memoria della rete neurale (WASM),
- * l'elaborazione frame-by-frame (inferenza) con auto-rilevamento del lato corporeo,
- * e delega il rendering grafico sul Canvas a un modulo esterno specializzato.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -142,7 +139,8 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
           const lms = results.landmarks[0];
           const dynamicSide = detectCameraSide(lms);
 
-          const { state, event, primaryAngle, secondaryAngle, isTarget, progress } = processFrame(
+          // Estrazione aggiuntiva di targetProgress
+          const { state, event, primaryAngle, secondaryAngle, isTarget, progress, targetProgress } = processFrame(
             exercise, repStateRef.current, lms, dynamicSide
           );
           repStateRef.current = state;
@@ -177,12 +175,12 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
             }
           }
 
-          // Invocazione dei moduli grafici esterni
           drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, dynamicSide, exercise, repStateRef.current.metrics.faults?.size);
 
           if (exercise === 'SQUAT') {
             const kneePoint = lms[EXERCISES.SQUAT.landmarks[dynamicSide].knee];
-            drawSquatOverlays(ctx, canvas.width, canvas.height, kneePoint, progress, isTarget, smoothedKneeYRef);
+            // Passaggio di targetProgress al renderer per la tacca verde
+            drawSquatOverlays(ctx, canvas.width, canvas.height, kneePoint, progress, targetProgress, isTarget, smoothedKneeYRef);
           }
 
         } else {
