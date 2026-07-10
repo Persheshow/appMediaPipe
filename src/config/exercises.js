@@ -7,7 +7,6 @@
 
 export const EXERCISES = {
   SQUAT: {
-    // topKnee: Estensione completa (Lockout) | bottomKnee: Soglia base per la flessione
     thresholds: { bottomKnee: 105, topKnee: 160 },
     landmarks: {
       LEFT: { shoulder: 11, hip: 23, knee: 25, ankle: 27 },
@@ -15,8 +14,6 @@ export const EXERCISES = {
     }
   },
   DEADLIFT: {
-    // erectKnee/erectHip: Estensione di lockout | setupWristY: Altezza bilanciere in partenza
-    // liftThreshold: Delta Y per inizio tirata | maxWristDropDuringLift: Tolleranza discesa (IPF Rule)
     thresholds: { erectKnee: 165, erectHip: 165, setupWristY: 0.65, liftThreshold: 0.02, dropThreshold: 0.05, maxWristDropDuringLift: 0.04 },
     landmarks: {
       LEFT: { shoulder: 11, hip: 23, knee: 25, ankle: 27, wrist: 15 },
@@ -24,8 +21,6 @@ export const EXERCISES = {
     }
   },
   OVERHEAD_PRESS: {
-    // topElbow: Estensione omero (Lockout) | bottomElbow: Massima flessione eccentrica
-    // maxTrunkLean: Limite iperlordosi | maxKneeBend: Limite cheating arti inferiori (Push press)
     thresholds: { topElbow: 160, bottomElbow: 140, maxTrunkLean: 20, maxKneeBend: 15 },
     landmarks: {
       LEFT: { shoulder: 11, elbow: 13, wrist: 15, hip: 23, knee: 25, ankle: 27 },
@@ -41,15 +36,15 @@ export const EXERCISES = {
 export const SKELETON_COLORS = {
   target: '#ffffff',  // Bianco - Tracciamento target (Alto contrasto sul video)
   active: '#ffffff',  // Bianco - Tracciamento standard in movimento (Alto contrasto sul video)
-  warning: '#6c0000',  // Rosso - Avviso (Riservato - Mappato su colore primario per coerenza)
-  error: '#ffffff',  // Bianco - Errore (Riservato - Mappato su colore secondario per coerenza)
+  warning: '#6c0000', // Rosso scuro - Avviso per falli rilevati in tempo reale
+  error: '#ffffff',   // Bianco - Errore
 };
 
 /**
  * Parametri per il filtro passa-basso (Exponential Moving Average - EMA).
- * Definiscono l'inerzia del segnale angolare per mitigare il rumore di acquisizione (Jittering).
+ * Bilanciati per abbattere la latenza garantendo stabilità (Alpha alzato, Beta abbassato).
  */
 export const SMOOTHING = {
-  alpha: 0.35,   // Fattore di reattività (peso attribuito al nuovo frame)
-  beta: 0.65,   // Fattore di inerzia (peso attribuito allo storico precedente)
+  alpha: 0.35,  // Reattività immediata al cambio di direzione cinematico
+  beta: 0.65,   // Fattore di attenuazione del rumore ad alta frequenza
 };

@@ -2,36 +2,18 @@
  * @file repLogic.js
  * @description Modulo matematico e logico per l'analisi biomeccanica delle alzate.
  * Implementa Macchine a Stati Finiti (FSM) specifiche per ogni esercizio, elaborando
- * le coordinate 3D fornite da MediaPipe per determinare la validità del movimento
- * secondo i regolamenti del Powerlifting (IPF).
+ * le coordinate 3D fornite da MediaPipe per determinare la validità del movimento.
  */
 
 import { EXERCISES, SMOOTHING } from '../config/exercises.js';
 
 // ── FILTRAGGIO DEL SEGNALE (SMOOTHING) ─────────────────────────────────────────
-/**
- * Applica un filtro passa-basso (Exponential Moving Average - EMA) ai dati angolari.
- * Necessario per mitigare il "jittering" (rumore ad alta frequenza) tipico 
- * dei sistemi di pose estimation frame-by-frame, restituendo una curva di movimento fluida.
- * @param {number|null} prev - Il valore dell'angolo calcolato nel frame precedente.
- * @param {number} current - Il valore grezzo dell'angolo nel frame attuale.
- * @returns {number} Il valore angolare smussato.
- */
 export function smoothAngle(prev, current) {
   if (prev === null) return current;
   return (current * SMOOTHING.alpha) + (prev * SMOOTHING.beta);
 }
 
 // ── CALCOLO VETTORIALE 3D ──────────────────────────────────────────────────────
-/**
- * Calcola l'angolo convesso formato da tre punti (landmark) nello spazio tridimensionale
- * utilizzando il teorema del prodotto scalare tra vettori.
- * Formula: θ = arccos( (v1 • v2) / (|v1| * |v2|) )
- * @param {Object} a - Coordinate del primo punto.
- * @param {Object} b - Coordinate del vertice.
- * @param {Object} c - Coordinate del terzo punto.
- * @returns {number} Angolo in gradi (0° - 180°).
- */
 export function calculateAngle(a, b, c) {
   const ba = { x: a.x - b.x, y: a.y - b.y, z: (a.z || 0) - (b.z || 0) };
   const bc = { x: c.x - b.x, y: c.y - b.y, z: (c.z || 0) - (b.z || 0) };
@@ -40,7 +22,7 @@ export function calculateAngle(a, b, c) {
   const magBA = Math.sqrt(ba.x * ba.x + ba.y * ba.y + ba.z * ba.z);
   const magBC = Math.sqrt(bc.x * bc.x + bc.y * bc.y + bc.z * bc.z);
 
-  if (magBA === 0 || magBC === 0) return 0; // Prevenzione divisione per zero
+  if (magBA === 0 || magBC === 0) return 0;
 
   let cosAngle = dotProduct / (magBA * magBC);
   cosAngle = Math.max(-1.0, Math.min(1.0, cosAngle));
@@ -49,26 +31,21 @@ export function calculateAngle(a, b, c) {
 }
 
 // ── MACCHINA A STATI: INIZIALIZZAZIONE ─────────────────────────────────────────
-/**
- * Inizializza o resetta il contesto della Macchina a Stati Finiti (FSM)
- * e il buffer metrico utilizzato per validare la ripetizione corrente.
- * @returns {Object} Struttura dati dello stato iniziale.
- */
 export function createInitialState() {
   return {
-    movementState: 'STANDING', // Fasi: STANDING, DESCENDING, ASCENDING, DROPPING, SETUP, LIFTING, LOCKED
-    smoothedPrimary: null,     // Angolo principale smussato (es. Ginocchio per Squat)
-    smoothedSecondary: null,   // Angolo secondario smussato (es. Schiena per OHP)
+    movementState: 'STANDING',
+    smoothedPrimary: null,
+    smoothedSecondary: null,
     lastAngle: 180,
-    lastAngleHistory: [],      // Buffer circolare per l'analisi delle derivate (inversione di moto)
+    lastAngleHistory: [],
     lastActiveTime: Date.now(),
     occludedSince: null,
     metrics: {
-      faults: new Set(),       // Criteri di invalidazione registrati
+      faults: new Set(),
       startX: null,
       maxAscentAngle: 0,
       lockedAtStart: false,
-      deepEnough: false,       // Flag per rottura del parallelo (Squat/OHP)
+      deepEnough: false,
       minWristY: 1.0,
       maxWristYDuringLift: null,
       startKneeAngle: null,
@@ -218,9 +195,7 @@ export function processDeadlift(state, landmarks, side) {
 
   if (!isVisible) {
     const { shouldReset } = handleOcclusion(state, 'DEADLIFT');
-    if (shouldReset) {
-      return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
-    }
+    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
     return { state, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
   }
   state.occludedSince = null;
@@ -301,9 +276,7 @@ export function processOverheadPress(state, landmarks, side) {
 
   if (!isVisible) {
     const { shouldReset } = handleOcclusion(state, 'OVERHEAD_PRESS');
-    if (shouldReset) {
-      return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
-    }
+    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
     return { state, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
   }
   state.occludedSince = null;
@@ -367,7 +340,6 @@ export function processOverheadPress(state, landmarks, side) {
   return { state, event, primaryAngle: elbowAngle, secondaryAngle: trunkAngle, isTarget: elbowAngle > cfg.topElbow };
 }
 
-// ── DISPATCHER CENTRALE ────────────────────────────────────────────────────────
 export function processFrame(exercise, state, landmarks, side) {
   if (exercise === 'SQUAT') return processSquat(state, landmarks, side);
   if (exercise === 'DEADLIFT') return processDeadlift(state, landmarks, side);

@@ -1,12 +1,16 @@
 /**
  * @file usePose.js
  * @description Hook custom React per l'integrazione del modello di Computer Vision MediaPipe.
+ * Gestisce l'acquisizione del flusso video, l'allocazione in memoria della rete neurale (WASM),
+ * l'elaborazione frame-by-frame (inferenza) con auto-rilevamento del lato corporeo,
+ * e delega il rendering grafico sul Canvas a un modulo esterno specializzato.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
-import { EXERCISES, SKELETON_COLORS } from '../config/exercises';
+import { drawSkeleton, drawSquatOverlays } from '../utils/canvasRenderer';
+import { EXERCISES } from '../config/exercises';
 
 export function usePose(exercise, isActive, facingMode, onNewLog) {
   const videoRef = useRef(null);
@@ -94,7 +98,6 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
   useEffect(() => {
     if (!isActive) return;
 
-    // ── EURISTICA DI AUTO-DETECTION LATO CORPO ───────────────────────────────
     function detectCameraSide(landmarks) {
       const leftVis = landmarks[11].visibility + landmarks[23].visibility + landmarks[25].visibility;
       const rightVis = landmarks[12].visibility + landmarks[24].visibility + landmarks[26].visibility;
@@ -104,89 +107,6 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
       if (leftVis > rightVis + 0.2 && leftZ < rightZ) return 'LEFT';
       if (rightVis > leftVis + 0.2 && rightZ < leftZ) return 'RIGHT';
       return leftVis >= rightVis ? 'LEFT' : 'RIGHT';
-    }
-
-    /**
-     * @function drawSkeleton
-     * @description Renderizza gli overlay sul canvas HTML.
-     */
-    function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, progress) {
-      let color = SKELETON_COLORS.active;
-
-      if (repStateRef.current.metrics.faults?.size > 0) {
-        color = SKELETON_COLORS.warning;
-      } else if (isTargetReached) {
-        color = SKELETON_COLORS.target;
-      }
-
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = color;
-
-      const lmConfig = EXERCISES[ex]?.landmarks[side];
-      if (!lmConfig) return;
-
-      const baseConnections = [[lmConfig.shoulder, lmConfig.hip], [lmConfig.hip, lmConfig.knee], [lmConfig.knee, lmConfig.ankle]];
-      const armConnections = (ex === 'OVERHEAD_PRESS' || ex === 'DEADLIFT') && lmConfig.elbow
-        ? [[lmConfig.shoulder, lmConfig.elbow], [lmConfig.elbow, lmConfig.wrist]] : [];
-
-      [...baseConnections, ...armConnections].forEach(([s, e]) => {
-        if (s === undefined || e === undefined) return;
-        const p1 = landmarks[s], p2 = landmarks[e];
-        if (p1 && p2 && p1.visibility > 0.4 && p2.visibility > 0.4) {
-          ctx.beginPath(); ctx.moveTo(p1.x * w, p1.y * h); ctx.lineTo(p2.x * w, p2.y * h); ctx.stroke();
-        }
-      });
-
-      const hipPoint = landmarks[lmConfig.hip];
-      if (hipPoint && hipPoint.visibility > 0.4) {
-        ctx.beginPath();
-        ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
-        ctx.arc(hipPoint.x * w, hipPoint.y * h, 6, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
-      }
-
-      if (ex === 'SQUAT') {
-        const kneePoint = landmarks[lmConfig.knee];
-
-        if (kneePoint && kneePoint.visibility > 0.4) {
-          if (smoothedKneeYRef.current === null) {
-            smoothedKneeYRef.current = kneePoint.y;
-          } else {
-            smoothedKneeYRef.current = (kneePoint.y * 0.15) + (smoothedKneeYRef.current * 0.85);
-          }
-
-          const kneeY = smoothedKneeYRef.current * h;
-
-          ctx.beginPath();
-          ctx.setLineDash([8, 6]);
-          ctx.moveTo(0, kneeY);
-          ctx.lineTo(w, kneeY);
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = '#00ff88';
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-
-        if (progress !== undefined) {
-          const barW = 10;
-          const barH = h * 0.3;
-          const barX = w - barW - 15;
-          const barY = (h - barH) / 2;
-
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.fillRect(barX, barY, barW, barH);
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(barX, barY, barW, barH);
-
-          const fillH = (progress / 100) * barH;
-          ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
-          ctx.fillRect(barX, barY + barH - fillH, barW, fillH);
-        }
-      }
     }
 
     function loop() {
@@ -257,7 +177,13 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
             }
           }
 
-          drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, dynamicSide, exercise, progress);
+          // Invocazione dei moduli grafici esterni
+          drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, dynamicSide, exercise, repStateRef.current.metrics.faults?.size);
+
+          if (exercise === 'SQUAT') {
+            const kneePoint = lms[EXERCISES.SQUAT.landmarks[dynamicSide].knee];
+            drawSquatOverlays(ctx, canvas.width, canvas.height, kneePoint, progress, isTarget, smoothedKneeYRef);
+          }
 
         } else {
           noLandmarkFrames.current++;
