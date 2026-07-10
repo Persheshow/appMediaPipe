@@ -50,6 +50,6 @@ export const SKELETON_COLORS = {
  * Definiscono l'inerzia del segnale angolare per mitigare il rumore di acquisizione (Jittering).
  */
 export const SMOOTHING = {
-  alpha: 0.15,   // Fattore di reattività (peso attribuito al nuovo frame)
-  beta: 0.85,   // Fattore di inerzia (peso attribuito allo storico precedente)
+  alpha: 0.35,   // Fattore di reattività (peso attribuito al nuovo frame)
+  beta: 0.65,   // Fattore di inerzia (peso attribuito allo storico precedente)
 };

@@ -1,9 +1,6 @@
 /**
  * @file usePose.js
  * @description Hook custom React per l'integrazione del modello di Computer Vision MediaPipe.
- * Gestisce l'acquisizione del flusso video, l'allocazione in memoria della rete neurale (WASM),
- * l'elaborazione frame-by-frame (inferenza) con auto-rilevamento del lato corporeo,
- * e la sincronizzazione con la logica di validazione cinematica.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -12,7 +9,6 @@ import { processFrame, createInitialState } from '../logic/repLogic';
 import { EXERCISES, SKELETON_COLORS } from '../config/exercises';
 
 export function usePose(exercise, isActive, facingMode, onNewLog) {
-  // ── RIFERIMENTI MUTABILI (REFS) ────────────────────────────────────────────
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const landmarkerRef = useRef(null);
@@ -22,8 +18,8 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
   const prevAnglesRef = useRef({ primary: null, secondary: null });
   const noLandmarkFrames = useRef(0);
   const lastVideoTimeRef = useRef(-1);
+  const smoothedKneeYRef = useRef(null);
 
-  // ── STATO REATTIVO DELL'INTERFACCIA (STATE) ─────────────────────────────────
   const [isLoading, setIsLoading] = useState(true);
   const [isTrackingLost, setIsTrackingLost] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('Inizializzazione Modello...');
@@ -33,11 +29,11 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
   const [faults, setFaults] = useState([]);
   const [angles, setAngles] = useState({ primary: null, secondary: null });
 
-  // ── RESET DEI CONTATORI LOCALI ──────────────────────────────────────────────
   useEffect(() => {
     repStateRef.current = createInitialState();
     prevAnglesRef.current = { primary: null, secondary: null };
     noLandmarkFrames.current = 0;
+    smoothedKneeYRef.current = null;
     setValidReps(0);
     setNoReps(0);
     setFaults([]);
@@ -45,22 +41,18 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
     setIsTrackingLost(false);
   }, [exercise, isActive, facingMode]);
 
-  // ── INIZIALIZZAZIONE DELLA RETE NEURALE ─────────────────────────────────────
   useEffect(() => {
     let isMounted = true;
     async function loadModel() {
       try {
         const vision = await FilesetResolver.forVisionTasks('/wasm');
         const landmarker = await PoseLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: '/models/pose_landmarker_lite.task',
-            delegate: 'GPU',
-          },
+          baseOptions: { modelAssetPath: '/models/pose_landmarker_lite.task', delegate: 'GPU' },
           runningMode: 'VIDEO',
           numPoses: 1,
         });
-        if (isMounted) { landmarkerRef.current = landmarker; }
-        else { landmarker.close(); }
+        if (isMounted) landmarkerRef.current = landmarker;
+        else landmarker.close();
       } catch (err) {
         if (isMounted) setError('Errore caricamento modello: ' + err.message);
       }
@@ -75,16 +67,12 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
     };
   }, []);
 
-  // ── ACQUISIZIONE FLUSSO VIDEO ───────────────────────────────────────────────
   useEffect(() => {
     if (!isActive) return;
     const videoElement = videoRef.current;
     async function startCamera() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingMode },
-          audio: false,
-        });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode }, audio: false });
         if (videoElement) {
           videoElement.srcObject = stream;
           videoElement.onloadedmetadata = () => videoElement.play();
@@ -103,10 +91,10 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
     };
   }, [isActive, facingMode]);
 
-  // ── PIPELINE DI ELABORAZIONE (MAIN LOOP) ────────────────────────────────────
   useEffect(() => {
     if (!isActive) return;
 
+    // ── EURISTICA DI AUTO-DETECTION LATO CORPO ───────────────────────────────
     function detectCameraSide(landmarks) {
       const leftVis = landmarks[11].visibility + landmarks[23].visibility + landmarks[25].visibility;
       const rightVis = landmarks[12].visibility + landmarks[24].visibility + landmarks[26].visibility;
@@ -120,8 +108,7 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
 
     /**
      * @function drawSkeleton
-     * @description Renderizza gli overlay di tracciamento sul canvas HTML.
-     * Accetta la "progress" per il rendering in tempo reale della profondità dello squat.
+     * @description Renderizza gli overlay sul canvas HTML.
      */
     function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, progress) {
       let color = SKELETON_COLORS.active;
@@ -132,7 +119,6 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
         color = SKELETON_COLORS.target;
       }
 
-      // 1. Spessore linee dell'esoscheletro assottigliato (da 5 a 2)
       ctx.lineWidth = 2;
       ctx.strokeStyle = color;
 
@@ -151,52 +137,51 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
         }
       });
 
-      // 2. Disegno ESCLUSIVO del punto all'anca (hip) rosso -> verde
       const hipPoint = landmarks[lmConfig.hip];
       if (hipPoint && hipPoint.visibility > 0.4) {
         ctx.beginPath();
-        // Colore rosso puro di base (non raggiunto), Verde brillante (00ff88) se sotto il parallelo
         ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
         ctx.arc(hipPoint.x * w, hipPoint.y * h, 6, 0, 2 * Math.PI);
         ctx.fill();
-        // Bordo bianco per risaltare sul corpo
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
       }
 
-      // Overlays specifici per lo SQUAT
       if (ex === 'SQUAT') {
         const kneePoint = landmarks[lmConfig.knee];
 
-        // 3. Linea tratteggiata verde in corrispondenza del ginocchio (Il Parallelo)
         if (kneePoint && kneePoint.visibility > 0.4) {
-          const kneeY = kneePoint.y * h;
+          if (smoothedKneeYRef.current === null) {
+            smoothedKneeYRef.current = kneePoint.y;
+          } else {
+            smoothedKneeYRef.current = (kneePoint.y * 0.15) + (smoothedKneeYRef.current * 0.85);
+          }
+
+          const kneeY = smoothedKneeYRef.current * h;
+
           ctx.beginPath();
-          ctx.setLineDash([8, 6]); // Attiva tratteggio
+          ctx.setLineDash([8, 6]);
           ctx.moveTo(0, kneeY);
           ctx.lineTo(w, kneeY);
           ctx.lineWidth = 2;
-          ctx.strokeStyle = '#00ff88'; // Verde acceso per evidenziare il limite
+          ctx.strokeStyle = '#00ff88';
           ctx.stroke();
-          ctx.setLineDash([]); // Ripristina tratto continuo per i frame successivi
+          ctx.setLineDash([]);
         }
 
-        // 4. Barra laterale di progressione (Profondità)
         if (progress !== undefined) {
           const barW = 10;
-          const barH = h * 0.3; // La barra occupa il 30% dell'altezza verticale
-          const barX = w - barW - 15; // 15px di margine dal bordo destro
-          const barY = (h - barH) / 2; // Centrata in altezza
+          const barH = h * 0.3;
+          const barX = w - barW - 15;
+          const barY = (h - barH) / 2;
 
-          // Costruzione del container della barra
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; // Semitrasparente
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
           ctx.fillRect(barX, barY, barW, barH);
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 1;
           ctx.strokeRect(barX, barY, barW, barH);
 
-          // Calcolo e riempimento del livello (cresce verso l'alto simulando il superamento della soglia)
           const fillH = (progress / 100) * barH;
           ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
           ctx.fillRect(barX, barY + barH - fillH, barW, fillH);
@@ -237,7 +222,6 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
           const lms = results.landmarks[0];
           const dynamicSide = detectCameraSide(lms);
 
-          // Estrazione della 'progress' dal processo di analisi matematica
           const { state, event, primaryAngle, secondaryAngle, isTarget, progress } = processFrame(
             exercise, repStateRef.current, lms, dynamicSide
           );
@@ -273,7 +257,6 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
             }
           }
 
-          // Passaggio della progress calcolata alla pipeline grafica
           drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, dynamicSide, exercise, progress);
 
         } else {
@@ -294,6 +277,7 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
     repStateRef.current = createInitialState();
     prevAnglesRef.current = { primary: null, secondary: null };
     noLandmarkFrames.current = 0;
+    smoothedKneeYRef.current = null;
     setValidReps(0);
     setNoReps(0);
     setFaults([]);

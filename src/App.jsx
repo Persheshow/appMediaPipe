@@ -43,18 +43,15 @@ export default function App() {
   const [visibleFaults, setVisibleFaults] = useState([]);
 
   useEffect(() => {
-    // Se la Macchina a Stati rileva un errore, lo mostriamo e facciamo partire il timer
     if (faults && faults.length > 0) {
       setVisibleFaults(faults);
 
       const timer = setTimeout(() => {
-        setVisibleFaults([]); // Nasconde l'alert dopo 3.5 secondi
+        setVisibleFaults([]);
       }, 3500);
 
-      // Cleanup: se arriva un nuovo evento prima dello scadere del tempo, cancella il vecchio timer
       return () => clearTimeout(timer);
     } else {
-      // Se la ripetizione è valida, nascondiamo immediatamente eventuali errori precedenti
       setVisibleFaults([]);
     }
   }, [faults]);
@@ -62,10 +59,6 @@ export default function App() {
   // ── GESTIONE EFFETTO ACUSTICO E NOTIFICA DELLE RIPETIZIONI VALIDE ───────────
   const [validNotification, setValidNotification] = useState(null);
 
-  /**
-   * Genera sinteticamente un segnale acustico bipolare ad alta frequenza.
-   * Utilizza le funzioni native Web Audio API per evitare l'uso di risorse multimediali esterne.
-   */
   const playValidationSound = () => {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -75,10 +68,9 @@ export default function App() {
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
 
-      oscillator.type = 'sine'; // Onda sinusoidale per un tono puro privo di distorsioni
-      oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // Nota Re5 (D5)
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime);
 
-      // Controllo dell'inviluppo di ampiezza per evitare clic digitali transitori
       gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
 
@@ -86,20 +78,19 @@ export default function App() {
       gainNode.connect(audioCtx.destination);
 
       oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.25); // Durata totale dell'impulso: 250 millisecondi
+      oscillator.stop(audioCtx.currentTime + 0.25);
     } catch (e) {
       console.warn("Esecuzione del flusso audio interrotta dalle restrizioni del browser:", e);
     }
   };
 
   useEffect(() => {
-    // Monitora l'incremento numerico del contatore delle ripetizioni valide
     if (validReps > 0) {
       playValidationSound();
       setValidNotification(`Ripetizione ${validReps} Valida`);
 
       const notificationTimer = setTimeout(() => {
-        setValidNotification(null); // Rimozione dell'overlay ridotta a 1.2 secondi (flash)
+        setValidNotification(null);
       }, 1200);
 
       return () => clearTimeout(notificationTimer);
@@ -130,12 +121,11 @@ export default function App() {
   // ── GESTIONE DATI ED ESPORTAZIONE ───────────────────────────────────────────
   const exportCSV = () => {
     const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const headers = ['Ora', 'Esercizio', 'Lato Rilevato', 'Esito', 'Errori'];
+    const headers = ['Ora', 'Esercizio', 'Esito', 'Errori'];
 
     const rows = sessionLogs.map(log => [
       log.time,
       log.ex,
-      log.side === 'LEFT' ? 'Sinistro' : 'Destro',
       log.esito,
       log.errori,
     ].map(escapeCSV).join(';')).join('\n');
@@ -282,7 +272,7 @@ export default function App() {
               </div>
             )}
 
-            {/* NOTIFICA RIPETIZIONE VALIDA (Restyling minimalista senza sfondo ingombrante) */}
+            {/* NOTIFICA RIPETIZIONE VALIDA */}
             {validNotification && !isLoading && !error && (
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center gap-1 pointer-events-none">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={4} stroke="#07c304" className="w-16 h-16 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
@@ -336,7 +326,7 @@ export default function App() {
                   <div className="flex items-center gap-4">
                     <div className="flex flex-col">
                       <span className="text-[10px] uppercase tracking-widest">
-                        {log.time}
+                        {log.time} –
                       </span>
                       <span className="uppercase tracking-widest text-xs mt-1">
                         {log.ex === 'SQUAT' ? 'Squat' : log.ex === 'DEADLIFT' ? 'Stacco' : 'Pressa'}
@@ -348,9 +338,11 @@ export default function App() {
                     <span className="text-xs uppercase tracking-wider">
                       {log.esito === 'VALID_REP' ? 'VALIDA' : 'NON VALIDA'}
                     </span>
-                    <span className="text-[10px] uppercase mt-1">
-                      {log.errori === 'Nessuno' ? '' : log.errori}
-                    </span>
+                    {log.errori !== 'Nessuno' && (
+                      <span className="text-[10px] uppercase mt-1">
+                        {log.errori}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -381,7 +373,7 @@ export default function App() {
         </div>
       )}
 
-      {/* FOOTER FASE ATTIVA: Pulsante Indietro spostato al fondo della vista globale */}
+      {/* FOOTER FASE ATTIVA: Bottone Indietro posizionato sotto il registro */}
       {isActive && (
         <footer className="w-full max-w-xl mt-6 mb-8">
           <button onClick={() => setIsActive(false)} className="w-full py-4 bg-white hover:bg-[#002f6c] hover:text-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none">

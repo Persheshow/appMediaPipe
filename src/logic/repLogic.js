@@ -13,7 +13,7 @@ import { EXERCISES, SMOOTHING } from '../config/exercises.js';
  * Applica un filtro passa-basso (Exponential Moving Average - EMA) ai dati angolari.
  * Necessario per mitigare il "jittering" (rumore ad alta frequenza) tipico 
  * dei sistemi di pose estimation frame-by-frame, restituendo una curva di movimento fluida.
- * * @param {number|null} prev - Il valore dell'angolo calcolato nel frame precedente.
+ * @param {number|null} prev - Il valore dell'angolo calcolato nel frame precedente.
  * @param {number} current - Il valore grezzo dell'angolo nel frame attuale.
  * @returns {number} Il valore angolare smussato.
  */
@@ -27,9 +27,9 @@ export function smoothAngle(prev, current) {
  * Calcola l'angolo convesso formato da tre punti (landmark) nello spazio tridimensionale
  * utilizzando il teorema del prodotto scalare tra vettori.
  * Formula: θ = arccos( (v1 • v2) / (|v1| * |v2|) )
- * * @param {Object} a - Coordinate del primo punto (es. Anca).
- * @param {Object} b - Coordinate del vertice (es. Ginocchio).
- * @param {Object} c - Coordinate del terzo punto (es. Caviglia).
+ * @param {Object} a - Coordinate del primo punto.
+ * @param {Object} b - Coordinate del vertice.
+ * @param {Object} c - Coordinate del terzo punto.
  * @returns {number} Angolo in gradi (0° - 180°).
  */
 export function calculateAngle(a, b, c) {
@@ -40,7 +40,7 @@ export function calculateAngle(a, b, c) {
   const magBA = Math.sqrt(ba.x * ba.x + ba.y * ba.y + ba.z * ba.z);
   const magBC = Math.sqrt(bc.x * bc.x + bc.y * bc.y + bc.z * bc.z);
 
-  if (magBA === 0 || magBC === 0) return 0;
+  if (magBA === 0 || magBC === 0) return 0; // Prevenzione divisione per zero
 
   let cosAngle = dotProduct / (magBA * magBC);
   cosAngle = Math.max(-1.0, Math.min(1.0, cosAngle));
@@ -49,21 +49,26 @@ export function calculateAngle(a, b, c) {
 }
 
 // ── MACCHINA A STATI: INIZIALIZZAZIONE ─────────────────────────────────────────
+/**
+ * Inizializza o resetta il contesto della Macchina a Stati Finiti (FSM)
+ * e il buffer metrico utilizzato per validare la ripetizione corrente.
+ * @returns {Object} Struttura dati dello stato iniziale.
+ */
 export function createInitialState() {
   return {
-    movementState: 'STANDING',
-    smoothedPrimary: null,
-    smoothedSecondary: null,
+    movementState: 'STANDING', // Fasi: STANDING, DESCENDING, ASCENDING, DROPPING, SETUP, LIFTING, LOCKED
+    smoothedPrimary: null,     // Angolo principale smussato (es. Ginocchio per Squat)
+    smoothedSecondary: null,   // Angolo secondario smussato (es. Schiena per OHP)
     lastAngle: 180,
-    lastAngleHistory: [],
+    lastAngleHistory: [],      // Buffer circolare per l'analisi delle derivate (inversione di moto)
     lastActiveTime: Date.now(),
     occludedSince: null,
     metrics: {
-      faults: new Set(),
+      faults: new Set(),       // Criteri di invalidazione registrati
       startX: null,
       maxAscentAngle: 0,
       lockedAtStart: false,
-      deepEnough: false,
+      deepEnough: false,       // Flag per rottura del parallelo (Squat/OHP)
       minWristY: 1.0,
       maxWristYDuringLift: null,
       startKneeAngle: null,
@@ -71,23 +76,16 @@ export function createInitialState() {
   };
 }
 
-// ── EURISTICHE DI COMPENSAZIONE ────────────────────────────────────────────────
+// ── EURISTICHE DI COMPENSAZIONE (OCCLUSIONE SPAZIALE) ──────────────────────────
 function getShoulderLandmark(lm, primaryIdx, hip) {
   const oppositeIdx = primaryIdx === 11 ? 12 : 11;
   const primary = lm[primaryIdx];
   const opposite = lm[oppositeIdx];
 
   if (primary && primary.visibility > 0.25) return primary;
-  if (opposite && opposite.visibility > 0.25) {
-    return { ...opposite, x: 1 - opposite.x };
-  }
+  if (opposite && opposite.visibility > 0.25) return { ...opposite, x: 1 - opposite.x };
 
-  return {
-    x: hip.x,
-    y: hip.y - 0.25,
-    z: hip.z || 0,
-    visibility: 0.2,
-  };
+  return { x: hip.x, y: hip.y - 0.25, z: hip.z || 0, visibility: 0.2 };
 }
 
 function getElbowLandmark(lm, primaryIdx, shoulder, wrist) {
@@ -96,9 +94,7 @@ function getElbowLandmark(lm, primaryIdx, shoulder, wrist) {
   const opposite = lm[oppositeIdx];
 
   if (primary && primary.visibility > 0.25) return primary;
-  if (opposite && opposite.visibility > 0.25) {
-    return { ...opposite, x: 1 - opposite.x };
-  }
+  if (opposite && opposite.visibility > 0.25) return { ...opposite, x: 1 - opposite.x };
 
   if (shoulder && wrist) {
     return {
@@ -108,11 +104,10 @@ function getElbowLandmark(lm, primaryIdx, shoulder, wrist) {
       visibility: 0.2,
     };
   }
-
   return primary;
 }
 
-// ── GESTIONE EVENTI TEMPORALI ──────────────────────────────────────────────────
+// ── GESTIONE EVENTI TEMPORALI E DERIVATE ───────────────────────────────────────
 function checkTimeout(state) {
   const now = Date.now();
   if (state.movementState === 'STANDING') {
@@ -130,11 +125,11 @@ function checkTimeout(state) {
 
 function checkAscent(state, currentAngle) {
   state.lastAngleHistory.push(currentAngle);
-  if (state.lastAngleHistory.length > 5) {
+  if (state.lastAngleHistory.length > 3) {
     state.lastAngleHistory.shift();
   }
   const oldestAngle = state.lastAngleHistory[0];
-  return currentAngle > oldestAngle + 2;
+  return currentAngle > oldestAngle + 1.5;
 }
 
 function handleOcclusion(state, exercise) {
@@ -154,20 +149,11 @@ export function processSquat(state, landmarks, side) {
   const { hip, knee, ankle } = EXERCISES.SQUAT.landmarks[side];
   const lm = landmarks;
 
-  const isVisible =
-    lm[hip] && lm[hip].visibility > 0.3 &&
-    lm[knee] && lm[knee].visibility > 0.3 &&
-    lm[ankle] && lm[ankle].visibility > 0.3;
+  const isVisible = lm[hip]?.visibility > 0.3 && lm[knee]?.visibility > 0.3 && lm[ankle]?.visibility > 0.3;
 
   if (!isVisible) {
     const { shouldReset } = handleOcclusion(state, 'SQUAT');
-    if (shouldReset) {
-      return {
-        state: createInitialState(),
-        event: null,
-        primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0
-      };
-    }
+    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0 };
     return { state, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0 };
   }
   state.occludedSince = null;
@@ -179,14 +165,14 @@ export function processSquat(state, landmarks, side) {
   const m = state.metrics;
   let event = null;
 
-  // Calcolo della progressione percentuale verso la rottura del parallelo (0-100%)
   const totalRange = cfg.topKnee - (cfg.bottomKnee - 2);
   const currentDisplacement = cfg.topKnee - kneeAngle;
   let progress = (currentDisplacement / totalRange) * 100;
   progress = Math.max(0, Math.min(100, progress));
 
   const checkDepth = () => {
-    if (lm[hip].y > lm[knee].y + 0.005 || kneeAngle < cfg.bottomKnee - 2) {
+    const isBelowParallel = lm[hip].y > lm[knee].y || kneeAngle < cfg.bottomKnee;
+    if (isBelowParallel) {
       m.deepEnough = true;
     }
   };
@@ -209,23 +195,17 @@ export function processSquat(state, landmarks, side) {
       event = m.deepEnough
         ? { type: 'VALID_REP', faults: [] }
         : { type: 'NO_REP', faults: ['Mancato superamento del parallelo'] };
+
       state.movementState = 'STANDING';
       m.deepEnough = false;
       state.lastAngleHistory = [];
     }
   }
 
-  // Forza la barra al 100% visivo se il parallelo è stato rotto
   if (m.deepEnough) progress = 100;
-
   state.lastAngle = kneeAngle;
-  return {
-    state, event,
-    primaryAngle: kneeAngle,
-    secondaryAngle: state.smoothedSecondary,
-    isTarget: m.deepEnough,
-    progress // <- Nuovo parametro restituito
-  };
+
+  return { state, event, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: m.deepEnough, progress };
 }
 
 // ── MOTORI DI INFERENZA: STACCO DA TERRA (DEADLIFT) ────────────────────────────
@@ -234,9 +214,7 @@ export function processDeadlift(state, landmarks, side) {
   const { shoulder: shoulderIdx, hip, knee, ankle, wrist } = EXERCISES.DEADLIFT.landmarks[side];
   const lm = landmarks;
 
-  const isVisible =
-    lm[hip] && lm[hip].visibility > 0.3 &&
-    lm[knee] && lm[knee].visibility > 0.3;
+  const isVisible = lm[hip]?.visibility > 0.3 && lm[knee]?.visibility > 0.3;
 
   if (!isVisible) {
     const { shouldReset } = handleOcclusion(state, 'DEADLIFT');
@@ -306,23 +284,13 @@ export function processDeadlift(state, landmarks, side) {
   }
 
   state.lastAngle = hipAngle;
-  return {
-    state, event,
-    primaryAngle: hipAngle,
-    secondaryAngle: kneeAngle,
-    isTarget: isErect,
-  };
+  return { state, event, primaryAngle: hipAngle, secondaryAngle: kneeAngle, isTarget: isErect };
 }
 
 // ── MOTORI DI INFERENZA: MILITARY PRESS (OVERHEAD PRESS) ───────────────────────
 export function processOverheadPress(state, landmarks, side) {
   const cfg = EXERCISES.OVERHEAD_PRESS.thresholds;
-  const {
-    shoulder: shoulderIdx,
-    elbow: elbowIdx,
-    wrist,
-    hip, knee, ankle,
-  } = EXERCISES.OVERHEAD_PRESS.landmarks[side];
+  const { shoulder: shoulderIdx, elbow: elbowIdx, wrist, hip, knee, ankle } = EXERCISES.OVERHEAD_PRESS.landmarks[side];
   const lm = landmarks;
 
   const isVisible =
@@ -346,11 +314,7 @@ export function processOverheadPress(state, landmarks, side) {
   state.smoothedPrimary = smoothAngle(state.smoothedPrimary, rawElbow);
   const elbowAngle = state.smoothedPrimary;
 
-  const vertical = {
-    x: lm[shoulderIdx].x,
-    y: lm[shoulderIdx].y - 0.1,
-    z: lm[shoulderIdx].z || 0,
-  };
+  const vertical = { x: lm[shoulderIdx].x, y: lm[shoulderIdx].y - 0.1, z: lm[shoulderIdx].z || 0 };
   const rawTrunk = calculateAngle(vertical, lm[shoulderIdx], lm[hip]);
   state.smoothedSecondary = smoothAngle(state.smoothedSecondary, rawTrunk);
   const trunkAngle = state.smoothedSecondary;
@@ -359,7 +323,6 @@ export function processOverheadPress(state, landmarks, side) {
   const m = state.metrics;
 
   const kneeBend = m.startKneeAngle === null ? 0 : m.startKneeAngle - rawKnee;
-
   let event = null;
 
   if (state.movementState === 'STANDING') {
@@ -401,18 +364,13 @@ export function processOverheadPress(state, landmarks, side) {
   }
 
   state.lastAngle = elbowAngle;
-  return {
-    state, event,
-    primaryAngle: elbowAngle,
-    secondaryAngle: trunkAngle,
-    isTarget: elbowAngle > cfg.topElbow,
-  };
+  return { state, event, primaryAngle: elbowAngle, secondaryAngle: trunkAngle, isTarget: elbowAngle > cfg.topElbow };
 }
 
+// ── DISPATCHER CENTRALE ────────────────────────────────────────────────────────
 export function processFrame(exercise, state, landmarks, side) {
   if (exercise === 'SQUAT') return processSquat(state, landmarks, side);
   if (exercise === 'DEADLIFT') return processDeadlift(state, landmarks, side);
   if (exercise === 'OVERHEAD_PRESS') return processOverheadPress(state, landmarks, side);
-
   return { state, event: null };
 }
