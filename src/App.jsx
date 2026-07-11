@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { usePose } from './hooks/usePose';
 import { useVideoRecorder } from './hooks/useVideoRecorder';
 import logoUnifi from './assets/logo_unifi.png';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 const EXERCISE_LABELS = {
   SQUAT: 'Squat',
@@ -153,8 +154,8 @@ export default function App() {
                 <button
                   onClick={isRecording ? () => stopRecording(true) : startRecording}
                   className={`flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-widest rounded-none border transition-none ${isRecording
-                      ? 'bg-red-600 text-white border-red-600 animate-pulse'
-                      : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
+                    ? 'bg-red-600 text-white border-red-600 animate-pulse'
+                    : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
                     }`}
                 >
                   <span className={`w-3 h-3 rounded-full ${isRecording ? 'bg-white' : 'bg-red-600'}`}></span>
