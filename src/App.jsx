@@ -1,12 +1,10 @@
 /**
  * @file App.jsx
- * @description Modulo principale dell'interfaccia utente per l'analisi cinematica.
- * Configura l'ambiente visivo accademico (Ateneo UniFI), gestisce l'esportazione
- * del dataset strutturato in colonne per software statistici e centralizza il buffer di sessione.
  */
 
 import { useState, useEffect } from 'react';
 import { usePose } from './hooks/usePose';
+import { useVideoRecorder } from './hooks/useVideoRecorder';
 import logoUnifi from './assets/logo_unifi.png';
 
 const EXERCISE_LABELS = {
@@ -21,33 +19,17 @@ export default function App() {
   const [facingMode, setFacingMode] = useState('user');
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
   const [sessionLogs, setSessionLogs] = useState([]);
+  const [isRecording, setIsRecording] = useState(false);
 
   const handleNewLog = (newLog) => {
     setSessionLogs(prev => [...prev, newLog]);
   };
 
-  const { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, faults, angles, reset } = usePose(
-    exercise, isActive, facingMode, handleNewLog
+  const { videoRef, canvasRef, isLoading, error, validReps, reset } = usePose(
+    exercise, isActive, facingMode, isRecording, handleNewLog
   );
 
-  const exerciseLabel = EXERCISE_LABELS[exercise];
-  const mirrorClass = facingMode === 'user' ? 'scale-x-[-1]' : '';
-
-  // ── GESTIONE TEMPORIZZATA DELL'OVERLAY DI ERRORE ────────────────────────────
-  const [visibleFaults, setVisibleFaults] = useState([]);
-
-  useEffect(() => {
-    if (faults && faults.length > 0) {
-      setVisibleFaults(faults);
-      const timer = setTimeout(() => { setVisibleFaults([]); }, 3500);
-      return () => clearTimeout(timer);
-    } else {
-      setVisibleFaults([]);
-    }
-  }, [faults]);
-
-  // ── GESTIONE EFFETTO ACUSTICO E NOTIFICA DELLE RIPETIZIONI VALIDE ───────────
-  const [validNotification, setValidNotification] = useState(null);
+  const { startRecording, stopRecording } = useVideoRecorder(canvasRef, setIsRecording);
 
   const playValidationSound = () => {
     try {
@@ -70,20 +52,14 @@ export default function App() {
       oscillator.start();
       oscillator.stop(audioCtx.currentTime + 0.25);
     } catch (e) {
-      console.warn("Esecuzione del flusso audio interrotta dalle restrizioni del browser:", e);
+      console.warn("Esecuzione del flusso audio interrotta", e);
     }
   };
 
   useEffect(() => {
-    if (validReps > 0) {
-      playValidationSound();
-      setValidNotification(`Ripetizione ${validReps} Valida`);
-      const notificationTimer = setTimeout(() => { setValidNotification(null); }, 1200);
-      return () => clearTimeout(notificationTimer);
-    }
+    if (validReps > 0) playValidationSound();
   }, [validReps]);
 
-  // ── EFFETTI HARDWARE ────────────────────────────────────────────────────────
   useEffect(() => {
     async function checkCameras() {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -103,30 +79,6 @@ export default function App() {
     checkCameras();
   }, []);
 
-  // ── GESTIONE DATI ED ESPORTAZIONE ───────────────────────────────────────────
-  const exportCSV = () => {
-    const escapeCSV = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const headers = ['Ora', 'Esercizio', 'Esito', 'Errori'];
-
-    const rows = sessionLogs.map(log => [
-      log.time,
-      log.ex,
-      log.esito,
-      log.errori,
-    ].map(escapeCSV).join(';')).join('\n');
-
-    const csv = `\uFEFF${headers.map(escapeCSV).join(';')}\n${rows}`;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `dataset_cinematica_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   const clearAllHistory = () => {
     setSessionLogs([]);
     reset();
@@ -138,7 +90,7 @@ export default function App() {
       <header className="w-full max-w-xl text-center flex flex-col items-center my-8">
         <img src={logoUnifi} alt="Logo Università degli Studi di Firenze" className="w-48 h-auto object-contain mb-8" />
         <h1 className="text-2xl uppercase tracking-widest leading-tight">
-          Analisi cinematica in tempo reale per il riconoscimento di ripetizioni valide e non valide tramite MediaPipe
+          Analisi cinematica in tempo reale per il riconoscimento di ripetizioni valide e non valide
         </h1>
       </header>
 
@@ -152,7 +104,7 @@ export default function App() {
                   <button
                     key={key}
                     onClick={() => setExercise(key)}
-                    className={`py-3 px-4 rounded-none text-sm transition-none border ${exercise === key ? 'bg-[#002f6c] text-white border-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}
+                    className={`py-3 px-4 rounded-none text-sm border transition-none ${exercise === key ? 'bg-[#002f6c] text-white border-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}
                   >
                     {label}
                   </button>
@@ -164,12 +116,8 @@ export default function App() {
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs uppercase tracking-widest mb-1">2. Seleziona Fotocamera</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => setFacingMode('user')} className={`flex-1 py-3 rounded-none text-sm transition-none border ${facingMode === 'user' ? 'bg-[#002f6c] text-white border-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>
-                    Fotocamera Anteriore
-                  </button>
-                  <button onClick={() => setFacingMode('environment')} className={`flex-1 py-3 rounded-none text-sm transition-none border ${facingMode === 'environment' ? 'bg-[#002f6c] text-white border-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>
-                    Fotocamera Posteriore
-                  </button>
+                  <button onClick={() => setFacingMode('user')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${facingMode === 'user' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Fotocamera Anteriore</button>
+                  <button onClick={() => setFacingMode('environment')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${facingMode === 'environment' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Fotocamera Posteriore</button>
                 </div>
               </div>
             )}
@@ -185,27 +133,10 @@ export default function App() {
             </ul>
           </div>
 
-          <button onClick={() => setIsActive(true)} className="w-full py-4 bg-[#002f6c] hover:bg-white hover:text-[#002f6c] border border-[#002f6c] rounded-none text-lg text-white uppercase tracking-widest transition-none">
-            Inizia
-          </button>
+          <button onClick={() => setIsActive(true)} className="w-full py-4 bg-[#002f6c] text-white border border-[#002f6c] rounded-none text-lg uppercase tracking-widest transition-none hover:bg-white hover:text-[#002f6c]">Inizia</button>
         </div>
       ) : (
         <div className="w-full max-w-xl flex flex-col items-center">
-          <section className="w-full bg-white border border-[#002f6c] rounded-none p-4 flex justify-around mb-4">
-            <div className="text-center w-1/3">
-              <p className="text-[10px] uppercase tracking-widest mb-1">Ripetizioni Valide</p>
-              <p className="text-3xl">{validReps}</p>
-            </div>
-            <div className="w-px bg-[#002f6c] self-stretch" />
-            <div className="text-center w-2/3 flex flex-col items-center justify-center">
-              <p className="text-[10px] uppercase tracking-widest mb-1">Angolo</p>
-              <p className="text-sm font-mono whitespace-pre-line border border-[#002f6c] px-3 py-1.5 rounded-none">
-                {exercise === 'SQUAT' && (`Ginocchio: ${angles.primary ? Math.round(angles.primary) : '--'}°`)}
-                {exercise === 'DEADLIFT' && (`Anca: ${angles.primary ? Math.round(angles.primary) : '--'}° | Gin: ${angles.secondary ? Math.round(angles.secondary) : '--'}°`)}
-                {exercise === 'OVERHEAD_PRESS' && (`Gomito: ${angles.primary ? Math.round(angles.primary) : '--'}° | Tr: ${angles.secondary ? Math.round(angles.secondary) : '--'}°`)}
-              </p>
-            </div>
-          </section>
 
           <main className="w-full relative min-h-[50vh] bg-white rounded-none overflow-hidden border border-[#002f6c]">
             {isLoading && !error && (
@@ -217,37 +148,28 @@ export default function App() {
 
             {error && <div className="absolute inset-0 flex items-center justify-center bg-white p-6 text-center text-sm z-30 border-4 border-[#002f6c] uppercase">{error}</div>}
 
-            <video ref={videoRef} className={`w-full h-auto block ${mirrorClass}`} playsInline muted />
-            <canvas ref={canvasRef} className={`absolute top-0 left-0 w-full h-full ${mirrorClass}`} />
-
-            {visibleFaults.length > 0 && !isLoading && !error && (
-              <div className="absolute top-8 left-1/2 -translate-x-1/2 w-[85%] bg-white border border-[#002f6c] p-2 text-center z-20">
-                <p className="text-[10px] text-[#002f6c] uppercase tracking-widest mb-1">Esecuzione non Valida</p>
-                <p className="text-xs text-[#002f6c] uppercase tracking-widest">{visibleFaults.join(' • ')}</p>
+            {!isLoading && !error && (
+              <div className="absolute top-4 right-4 z-30">
+                <button
+                  onClick={isRecording ? () => stopRecording(true) : startRecording}
+                  className={`flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-widest rounded-none border transition-none ${isRecording
+                      ? 'bg-red-600 text-white border-red-600 animate-pulse'
+                      : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
+                    }`}
+                >
+                  <span className={`w-3 h-3 rounded-full ${isRecording ? 'bg-white' : 'bg-red-600'}`}></span>
+                  {isRecording ? 'STOP E SALVA' : 'INIZIA'}
+                </button>
               </div>
             )}
 
-            {validNotification && !isLoading && !error && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center gap-1 pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={4} stroke="#07c304" className="w-16 h-16 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-                <span className="bg-[#002f6c]/90 text-white px-3 py-1 text-[10px] uppercase tracking-widest font-mono border border-white/20 shadow-md">{validNotification}</span>
-              </div>
-            )}
+            {/* Il Canvas ora è la vista definitiva. Nessuna classe CSS mirrorClass */}
+            <video ref={videoRef} className="hidden" playsInline muted />
+            <canvas ref={canvasRef} className="w-full h-auto block" />
 
-            {isTrackingLost && !isLoading && !error && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#002f6c] text-white px-5 py-2.5 rounded-none text-xs tracking-widest flex items-center gap-2 border border-[#002f6c] uppercase z-20 w-max max-w-[90%]">
-                <span className="w-2 h-2 bg-white rounded-none animate-ping" />
-                Corpo Non Rilevato
-              </div>
-            )}
-
-            {hasMultipleCameras && !isLoading && !error && (
-              <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="absolute bottom-6 right-6 bg-white hover:bg-[#002f6c] hover:text-white border border-[#002f6c] text-[#002f6c] p-3.5 rounded-none z-30 transition-none" title="Inverti fotocamera">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
+            {hasMultipleCameras && !isLoading && !error && !isRecording && (
+              <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="absolute bottom-16 right-4 bg-white border border-[#002f6c] text-[#002f6c] p-3 rounded-none z-30 transition-none hover:bg-[#002f6c] hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
               </button>
             )}
           </main>
@@ -276,17 +198,16 @@ export default function App() {
                   </div>
                 </div>
               ))}
-              {sessionLogs.length > 10 && <div className="px-5 py-3 text-center text-[10px] border-t border-[#002f6c] uppercase tracking-widest">Visualizzati gli ultimi 10 record. Esporta in CSV per l'analisi completa.</div>}
+              {sessionLogs.length > 10 && <div className="px-5 py-3 text-center text-[10px] border-t border-[#002f6c] uppercase tracking-widest">Visualizzati gli ultimi 10 record della sessione attiva.</div>}
             </div>
           </section>
 
           {!isActive && (
             <div className="bg-white border border-[#002f6c] rounded-none p-4 flex flex-col gap-4">
-              <div className="flex items-center justify-between px-2"><span className="text-xs uppercase tracking-widest">Gestisci Acquisizioni</span></div>
-              <div className="flex gap-2">
-                <button onClick={clearAllHistory} className="flex-1 py-3 bg-white border border-[#002f6c] hover:bg-[#002f6c] hover:text-white rounded-none text-sm uppercase tracking-widest transition-none">Azzera</button>
-                <button onClick={exportCSV} className="flex-[2] py-3 bg-white border border-[#002f6c] hover:bg-[#002f6c] hover:text-white rounded-none text-sm uppercase tracking-widest transition-none">Esporta (.CSV)</button>
-              </div>
+              <div className="flex items-center justify-between px-2"><span className="text-xs uppercase tracking-widest">Gestisci Sessione</span></div>
+              <button onClick={clearAllHistory} className="w-full py-3 bg-white border border-[#002f6c] hover:bg-[#002f6c] hover:text-white rounded-none text-sm uppercase tracking-widest transition-none">
+                Azzera Storico
+              </button>
             </div>
           )}
         </div>
@@ -294,7 +215,15 @@ export default function App() {
 
       {isActive && (
         <footer className="w-full max-w-xl mt-6 mb-8">
-          <button onClick={() => setIsActive(false)} className="w-full py-4 bg-white hover:bg-[#002f6c] hover:text-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none">Indietro</button>
+          <button
+            onClick={() => {
+              if (isRecording) stopRecording(false);
+              setIsActive(false);
+            }}
+            className="w-full py-4 bg-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none hover:bg-[#002f6c] hover:text-white"
+          >
+            Indietro
+          </button>
         </footer>
       )}
     </div>

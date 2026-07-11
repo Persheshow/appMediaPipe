@@ -1,15 +1,14 @@
 /**
  * @file usePose.js
- * @description Hook custom React per l'integrazione del modello di Computer Vision MediaPipe.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
-import { drawSkeleton, drawSquatOverlays } from '../utils/canvasRenderer';
+import { drawSkeleton, drawSquatOverlays, drawHUD } from '../utils/canvasRenderer';
 import { EXERCISES } from '../config/exercises';
 
-export function usePose(exercise, isActive, facingMode, onNewLog) {
+export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const landmarkerRef = useRef(null);
@@ -20,6 +19,11 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
   const noLandmarkFrames = useRef(0);
   const lastVideoTimeRef = useRef(-1);
   const smoothedKneeYRef = useRef(null);
+  const isRecordingRef = useRef(isRecording);
+
+  const validRepsRef = useRef(0);
+  const noRepsRef = useRef(0);
+  const hudMessageRef = useRef(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isTrackingLost, setIsTrackingLost] = useState(false);
@@ -35,12 +39,22 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
     prevAnglesRef.current = { primary: null, secondary: null };
     noLandmarkFrames.current = 0;
     smoothedKneeYRef.current = null;
+
+    validRepsRef.current = 0;
+    noRepsRef.current = 0;
+    hudMessageRef.current = null;
+
     setValidReps(0);
     setNoReps(0);
     setFaults([]);
     setAngles({ primary: null, secondary: null });
     setIsTrackingLost(false);
   }, [exercise, isActive, facingMode]);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+    if (isRecording) reset();
+  }, [isRecording]);
 
   useEffect(() => {
     let isMounted = true;
@@ -83,7 +97,6 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
       }
     }
     startCamera();
-
     return () => {
       if (videoElement?.srcObject) {
         videoElement.srcObject.getTracks().forEach(t => t.stop());
@@ -100,7 +113,6 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
       const rightVis = landmarks[12].visibility + landmarks[24].visibility + landmarks[26].visibility;
       const leftZ = landmarks[11].z + landmarks[23].z + landmarks[25].z;
       const rightZ = landmarks[12].z + landmarks[24].z + landmarks[26].z;
-
       if (leftVis > rightVis + 0.2 && leftZ < rightZ) return 'LEFT';
       if (rightVis > leftVis + 0.2 && rightZ < leftZ) return 'RIGHT';
       return leftVis >= rightVis ? 'LEFT' : 'RIGHT';
@@ -112,7 +124,6 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
       const landmarker = landmarkerRef.current;
 
       if (video && canvas && landmarker && video.readyState >= 2) {
-
         if (video.currentTime === lastVideoTimeRef.current) {
           animFrameRef.current = requestAnimationFrame(loop);
           return;
@@ -125,30 +136,49 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
           canvas.height = video.videoHeight;
         }
 
-        const results = landmarker.detectForVideo(video, performance.now());
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const isMirrored = facingMode === 'user';
+        ctx.save();
+        if (isMirrored) {
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+        }
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         if (isLoadingRef.current) {
           setIsLoading(false); isLoadingRef.current = false;
         }
+
+        if (!isRecordingRef.current) {
+          ctx.restore();
+          drawHUD(ctx, canvas.width, canvas.height, validRepsRef.current, null, false, null);
+          animFrameRef.current = requestAnimationFrame(loop);
+          return;
+        }
+
+        const results = landmarker.detectForVideo(video, performance.now());
+        let isTarget = false;
+        let progress = 0;
+        let targetProgress = 0;
+        let dynamicSide = 'LEFT';
 
         if (results.landmarks?.length > 0) {
           noLandmarkFrames.current = 0;
           setIsTrackingLost(prev => { if (prev) return false; return prev; });
 
           const lms = results.landmarks[0];
-          const dynamicSide = detectCameraSide(lms);
+          dynamicSide = detectCameraSide(lms);
 
-          // Estrazione aggiuntiva di targetProgress
-          const { state, event, primaryAngle, secondaryAngle, isTarget, progress, targetProgress } = processFrame(
-            exercise, repStateRef.current, lms, dynamicSide
-          );
-          repStateRef.current = state;
+          const processed = processFrame(exercise, repStateRef.current, lms, dynamicSide);
+          repStateRef.current = processed.state;
+          const { event, primaryAngle, secondaryAngle } = processed;
+          isTarget = processed.isTarget;
+          progress = processed.progress;
+          targetProgress = processed.targetProgress;
 
-          if (
-            Math.abs((primaryAngle ?? 0) - (prevAnglesRef.current.primary ?? 0)) > 1 ||
-            Math.abs((secondaryAngle ?? 0) - (prevAnglesRef.current.secondary ?? 0)) > 1
-          ) {
+          if (Math.abs((primaryAngle ?? 0) - (prevAnglesRef.current.primary ?? 0)) > 1 || Math.abs((secondaryAngle ?? 0) - (prevAnglesRef.current.secondary ?? 0)) > 1) {
             setAngles({ primary: primaryAngle, secondary: secondaryAngle });
             prevAnglesRef.current = { primary: primaryAngle, secondary: secondaryAngle };
           }
@@ -156,11 +186,20 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
           if (event?.type === 'VALID_REP' || event?.type === 'NO_REP') {
             const isValida = event.type === 'VALID_REP';
 
-            if (isValida) { setValidReps(prev => prev + 1); setFaults([]); }
-            else { setNoReps(prev => prev + 1); setFaults(event.faults); }
+            if (isValida) {
+              validRepsRef.current += 1;
+              setValidReps(validRepsRef.current);
+              setFaults([]);
+              hudMessageRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + 2000 };
+            }
+            else {
+              noRepsRef.current += 1;
+              setNoReps(noRepsRef.current);
+              setFaults(event.faults);
+              hudMessageRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + 3000 };
+            }
 
             const timestamp = new Date();
-
             if (onNewLog) {
               onNewLog({
                 timestamp: timestamp.toISOString(),
@@ -169,17 +208,18 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
                 side: dynamicSide,
                 esito: event.type,
                 primaryAngle: primaryAngle === null ? '' : Math.round(primaryAngle),
-                finalState: state.movementState,
+                finalState: repStateRef.current.movementState,
                 errori: event.faults?.length ? event.faults.join(' - ') : 'Nessuno',
               });
             }
           }
 
-          drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, dynamicSide, exercise, repStateRef.current.metrics.faults?.size);
+          const isErrorActive = hudMessageRef.current && performance.now() < hudMessageRef.current.expires && hudMessageRef.current.type === 'INVALID';
+
+          drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, dynamicSide, exercise, isErrorActive);
 
           if (exercise === 'SQUAT') {
             const kneePoint = lms[EXERCISES.SQUAT.landmarks[dynamicSide].knee];
-            // Passaggio di targetProgress al renderer per la tacca verde
             drawSquatOverlays(ctx, canvas.width, canvas.height, kneePoint, progress, targetProgress, isTarget, smoothedKneeYRef);
           }
 
@@ -189,6 +229,18 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
             setIsTrackingLost(prev => { if (!prev) return true; return prev; });
           }
         }
+
+        ctx.restore();
+
+        drawHUD(
+          ctx,
+          canvas.width,
+          canvas.height,
+          validRepsRef.current,
+          hudMessageRef.current,
+          noLandmarkFrames.current > 30,
+          repStateRef.current.lastAngle
+        );
       }
       animFrameRef.current = requestAnimationFrame(loop);
     }
@@ -202,6 +254,11 @@ export function usePose(exercise, isActive, facingMode, onNewLog) {
     prevAnglesRef.current = { primary: null, secondary: null };
     noLandmarkFrames.current = 0;
     smoothedKneeYRef.current = null;
+
+    validRepsRef.current = 0;
+    noRepsRef.current = 0;
+    hudMessageRef.current = null;
+
     setValidReps(0);
     setNoReps(0);
     setFaults([]);

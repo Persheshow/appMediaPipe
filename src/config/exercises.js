@@ -1,13 +1,11 @@
 /**
  * @file exercises.js
- * @description File di configurazione globale per i parametri biomeccanici, 
- * i nodi topologici (landmarks) di MediaPipe e le costanti di rendering.
- * I valori angolari di soglia (thresholds) riflettono i regolamenti tecnici del Powerlifting (IPF).
+ * @description File di configurazione globale.
  */
 
 export const EXERCISES = {
   SQUAT: {
-    thresholds: { bottomKnee: 105, topKnee: 160 },
+    thresholds: { bottomKnee: 85, topKnee: 160 }, // Parallelo abbassato a 85° per eliminare i falsi positivi
     landmarks: {
       LEFT: { shoulder: 11, hip: 23, knee: 25, ankle: 27 },
       RIGHT: { shoulder: 12, hip: 24, knee: 26, ankle: 28 }
@@ -29,22 +27,14 @@ export const EXERCISES = {
   }
 };
 
-/**
- * Palette cromatica istituzionale per il rendering sul Canvas HTML.
- * Allineata rigidamente alle linee guida visive dell'Ateneo (Bianco e Blu UniFI).
- */
 export const SKELETON_COLORS = {
-  target: '#ffffff',  // Bianco - Tracciamento target (Alto contrasto sul video)
-  active: '#ffffff',  // Bianco - Tracciamento standard in movimento (Alto contrasto sul video)
-  warning: '#6c0000', // Rosso scuro - Avviso per falli rilevati in tempo reale
-  error: '#ffffff',   // Bianco - Errore
+  target: '#ffffff',
+  active: '#ffffff',
+  warning: '#6c0000',
+  error: '#ffffff',
 };
 
-/**
- * Parametri per il filtro passa-basso (Exponential Moving Average - EMA).
- * Bilanciati per abbattere la latenza garantendo stabilità (Alpha alzato, Beta abbassato).
- */
 export const SMOOTHING = {
-  alpha: 0.35,  // Reattività immediata al cambio di direzione cinematico
-  beta: 0.65,   // Fattore di attenuazione del rumore ad alta frequenza
+  alpha: 0.35,
+  beta: 0.65,
 };
