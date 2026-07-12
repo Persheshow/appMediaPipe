@@ -7,7 +7,6 @@ import { useRef, useCallback } from 'react';
 export function useVideoRecorder(canvasRef, setIsRecording) {
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
-    // Nuovo riferimento per decidere se esportare o scartare il file a fine registrazione
     const shouldSaveRef = useRef(true);
 
     const startRecording = useCallback(() => {
@@ -29,24 +28,29 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         };
 
         mediaRecorderRef.current.onstop = () => {
-            // Controllo condizionale: genera il file scaricabile solo se richiesto esplicitamente
-            if (shouldSaveRef.current) {
-                const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.webm`;
+            if (shouldSaveRef.current && chunksRef.current.length > 0) {
 
-                document.body.appendChild(a);
-                a.click();
+                // Finestra di dialogo per la conferma dell'esportazione
+                const userWantsToSave = window.confirm("Vuoi scaricare la registrazione video di questa sessione?");
 
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-                }, 100);
+                if (userWantsToSave) {
+                    const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.webm`;
+
+                    document.body.appendChild(a);
+                    a.click();
+
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    }, 100);
+                }
             }
-            // Svuotamento della memoria (garbage collection) indipendente dal salvataggio
+
             chunksRef.current = [];
         };
 
@@ -54,13 +58,9 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         setIsRecording(true);
     }, [canvasRef, setIsRecording]);
 
-    /**
-     * Ferma l'acquisizione del flusso video.
-     * @param {boolean} saveVideo - Se false, interrompe il MediaRecorder distruggendo i frame acquisiti.
-     */
     const stopRecording = useCallback((saveVideo = true) => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-            shouldSaveRef.current = saveVideo; // Passaggio dello stato all'evento onstop
+            shouldSaveRef.current = saveVideo;
             mediaRecorderRef.current.stop();
             setIsRecording(false);
         }

@@ -125,8 +125,8 @@ export function processSquat(state, landmarks, side) {
 
   if (!isVisible) {
     const { shouldReset } = handleOcclusion(state);
-    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0, targetProgress: 0 };
-    return { state, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false, progress: 0, targetProgress: 0 };
+    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
+    return { state, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
   }
   state.occludedSince = null;
   checkTimeout(state);
@@ -137,22 +137,14 @@ export function processSquat(state, landmarks, side) {
   const m = state.metrics;
   let event = null;
 
-  const maxKnee = cfg.topKnee;
-  const minKnee = 60;
-  const totalRange = maxKnee - minKnee;
-  const currentDisplacement = maxKnee - kneeAngle;
-  let progress = (currentDisplacement / totalRange) * 100;
-  progress = Math.max(0, Math.min(100, progress));
-  const targetProgress = ((maxKnee - cfg.bottomKnee) / totalRange) * 100;
-
   if (now - state.startTime < 1000) {
     state.lastAngle = kneeAngle;
-    return { state, event: null, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: false, progress, targetProgress };
+    return { state, event: null, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: false };
   }
 
   if (now < m.cooldownUntil) {
     state.lastAngle = kneeAngle;
-    return { state, event: null, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: m.deepEnough, progress, targetProgress };
+    return { state, event: null, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: m.deepEnough };
   }
 
   m.lowestKneeAngle = Math.min(m.lowestKneeAngle ?? 180, kneeAngle);
@@ -180,13 +172,12 @@ export function processSquat(state, landmarks, side) {
     if (kneeAngle > cfg.topKnee) {
       const repDuration = now - m.repStartTime;
 
-      // Aborto silenzioso spostato a > 125 gradi. Tra 125 e 85 decreta un NO REP ufficiale.
       if (m.lowestKneeAngle > 125 || repDuration < 800) {
         state.movementState = 'STANDING';
         m.deepEnough = false;
         m.lowestKneeAngle = 180;
         state.lastAngleHistory = [];
-        return { state, event: null, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: false, progress, targetProgress };
+        return { state, event: null, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: false };
       }
 
       event = m.deepEnough
@@ -202,10 +193,10 @@ export function processSquat(state, landmarks, side) {
   }
 
   state.lastAngle = kneeAngle;
-  return { state, event, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: m.deepEnough, progress, targetProgress };
+  return { state, event, primaryAngle: kneeAngle, secondaryAngle: state.smoothedSecondary, isTarget: m.deepEnough };
 }
 
-// ── STACCO E PRESSA ──
+// ── STACCO DA TERRA ──
 export function processDeadlift(state, landmarks, side) {
   const cfg = EXERCISES.DEADLIFT.thresholds;
   const { shoulder: shoulderIdx, hip, knee, ankle, wrist } = EXERCISES.DEADLIFT.landmarks[side];
@@ -307,6 +298,7 @@ export function processDeadlift(state, landmarks, side) {
   return { state, event, primaryAngle: hipAngle, secondaryAngle: kneeAngle, isTarget: isErect };
 }
 
+// ── PRESSA MILITARE ──
 export function processOverheadPress(state, landmarks, side) {
   const cfg = EXERCISES.OVERHEAD_PRESS.thresholds;
   const { shoulder: shoulderIdx, elbow: elbowIdx, wrist, hip, knee, ankle } = EXERCISES.OVERHEAD_PRESS.landmarks[side];

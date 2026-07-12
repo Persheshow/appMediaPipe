@@ -80,11 +80,6 @@ export default function App() {
     checkCameras();
   }, []);
 
-  const clearAllHistory = () => {
-    setSessionLogs([]);
-    reset();
-  };
-
   return (
     <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white">
 
@@ -149,31 +144,29 @@ export default function App() {
 
             {error && <div className="absolute inset-0 flex items-center justify-center bg-white p-6 text-center text-sm z-30 border-4 border-[#002f6c] uppercase">{error}</div>}
 
-            {!isLoading && !error && (
-              <div className="absolute top-4 right-4 z-30">
-                <button
-                  onClick={isRecording ? () => stopRecording(true) : startRecording}
-                  className={`flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-widest rounded-none border transition-none ${isRecording
-                    ? 'bg-red-600 text-white border-red-600 animate-pulse'
-                    : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
-                    }`}
-                >
-                  <span className={`w-3 h-3 rounded-full ${isRecording ? 'bg-white' : 'bg-red-600'}`}></span>
-                  {isRecording ? 'STOP E SALVA' : 'INIZIA'}
-                </button>
-              </div>
-            )}
-
-            {/* Il Canvas ora è la vista definitiva. Nessuna classe CSS mirrorClass */}
             <video ref={videoRef} className="hidden" playsInline muted />
             <canvas ref={canvasRef} className="w-full h-auto block" />
 
             {hasMultipleCameras && !isLoading && !error && !isRecording && (
-              <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="absolute bottom-16 right-4 bg-white border border-[#002f6c] text-[#002f6c] p-3 rounded-none z-30 transition-none hover:bg-[#002f6c] hover:text-white">
+              <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="absolute bottom-4 right-4 bg-white border border-[#002f6c] text-[#002f6c] p-3 rounded-none z-30 transition-none hover:bg-[#002f6c] hover:text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
               </button>
             )}
           </main>
+
+          {!isLoading && !error && (
+            <button
+              onClick={isRecording ? () => stopRecording(true) : startRecording}
+              className={`w-full mt-4 flex items-center justify-center gap-3 py-4 text-sm font-bold tracking-widest rounded-none border transition-none ${isRecording
+                ? 'bg-red-600 text-white border-red-600 animate-pulse'
+                : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
+                }`}
+            >
+              <span className={`w-3 h-3 rounded-full ${isRecording ? 'bg-white' : 'bg-red-600'}`}></span>
+              {isRecording ? 'STOP E SALVA' : 'INIZIA REGISTRAZIONE'}
+            </button>
+          )}
+
         </div>
       )}
 
@@ -202,15 +195,6 @@ export default function App() {
               {sessionLogs.length > 10 && <div className="px-5 py-3 text-center text-[10px] border-t border-[#002f6c] uppercase tracking-widest">Visualizzati gli ultimi 10 record della sessione attiva.</div>}
             </div>
           </section>
-
-          {!isActive && (
-            <div className="bg-white border border-[#002f6c] rounded-none p-4 flex flex-col gap-4">
-              <div className="flex items-center justify-between px-2"><span className="text-xs uppercase tracking-widest">Gestisci Sessione</span></div>
-              <button onClick={clearAllHistory} className="w-full py-3 bg-white border border-[#002f6c] hover:bg-[#002f6c] hover:text-white rounded-none text-sm uppercase tracking-widest transition-none">
-                Azzera Storico
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -227,6 +211,8 @@ export default function App() {
           </button>
         </footer>
       )}
+
+      <SpeedInsights />
     </div>
   );
 }

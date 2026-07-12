@@ -160,8 +160,6 @@ export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
 
         const results = landmarker.detectForVideo(video, performance.now());
         let isTarget = false;
-        let progress = 0;
-        let targetProgress = 0;
         let dynamicSide = 'LEFT';
 
         if (results.landmarks?.length > 0) {
@@ -175,8 +173,6 @@ export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
           repStateRef.current = processed.state;
           const { event, primaryAngle, secondaryAngle } = processed;
           isTarget = processed.isTarget;
-          progress = processed.progress;
-          targetProgress = processed.targetProgress;
 
           if (Math.abs((primaryAngle ?? 0) - (prevAnglesRef.current.primary ?? 0)) > 1 || Math.abs((secondaryAngle ?? 0) - (prevAnglesRef.current.secondary ?? 0)) > 1) {
             setAngles({ primary: primaryAngle, secondary: secondaryAngle });
@@ -220,7 +216,7 @@ export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
 
           if (exercise === 'SQUAT') {
             const kneePoint = lms[EXERCISES.SQUAT.landmarks[dynamicSide].knee];
-            drawSquatOverlays(ctx, canvas.width, canvas.height, kneePoint, progress, targetProgress, isTarget, smoothedKneeYRef);
+            drawSquatOverlays(ctx, canvas.width, canvas.height, kneePoint, isTarget, smoothedKneeYRef);
           }
 
         } else {
