@@ -1,67 +1,62 @@
-/**
- * @file useVideoRecorder.js
- * @description Hook per la cattura e la codifica del flusso Canvas in un file video.
- */
 import { useRef, useCallback } from 'react';
 
 export function useVideoRecorder(canvasRef, setIsRecording) {
-    const mediaRecorderRef = useRef(null);
-    const chunksRef = useRef([]);
-    const shouldSaveRef = useRef(true);
+    const registratoreRef = useRef(null);
+    const pezziVideoRef = useRef([]);
+    const vuoleSalvareRef = useRef(true);
 
     const startRecording = useCallback(() => {
         if (!canvasRef.current) return;
 
-        const stream = canvasRef.current.captureStream(30);
-        const options = { mimeType: 'video/webm; codecs=vp9' };
+        const flusso = canvasRef.current.captureStream(30);
+        const opzioni = { mimeType: 'video/webm; codecs=vp9' };
 
         try {
-            mediaRecorderRef.current = new MediaRecorder(stream, options);
+            registratoreRef.current = new MediaRecorder(flusso, opzioni);
         } catch (e) {
-            mediaRecorderRef.current = new MediaRecorder(stream);
+            registratoreRef.current = new MediaRecorder(flusso);
         }
 
-        mediaRecorderRef.current.ondataavailable = (e) => {
+        registratoreRef.current.ondataavailable = (e) => {
             if (e.data && e.data.size > 0) {
-                chunksRef.current.push(e.data);
+                pezziVideoRef.current.push(e.data);
             }
         };
 
-        mediaRecorderRef.current.onstop = () => {
-            if (shouldSaveRef.current && chunksRef.current.length > 0) {
+        registratoreRef.current.onstop = () => {
+            if (vuoleSalvareRef.current && pezziVideoRef.current.length > 0) {
 
-                // Finestra di dialogo per la conferma dell'esportazione
-                const userWantsToSave = window.confirm("Vuoi scaricare la registrazione video di questa sessione?");
+                const utenteConferma = window.confirm("Vuoi scaricare la registrazione video di questa sessione?");
 
-                if (userWantsToSave) {
-                    const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.webm`;
+                if (utenteConferma) {
+                    const fileVideo = new Blob(pezziVideoRef.current, { type: 'video/webm' });
+                    const linkTemp = URL.createObjectURL(fileVideo);
+                    const tagA = document.createElement('a');
+                    tagA.style.display = 'none';
+                    tagA.href = linkTemp;
+                    tagA.download = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.webm`;
 
-                    document.body.appendChild(a);
-                    a.click();
+                    document.body.appendChild(tagA);
+                    tagA.click();
 
                     setTimeout(() => {
-                        document.body.removeChild(a);
-                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(tagA);
+                        window.URL.revokeObjectURL(linkTemp);
                     }, 100);
                 }
             }
 
-            chunksRef.current = [];
+            pezziVideoRef.current = [];
         };
 
-        mediaRecorderRef.current.start();
+        registratoreRef.current.start();
         setIsRecording(true);
     }, [canvasRef, setIsRecording]);
 
-    const stopRecording = useCallback((saveVideo = true) => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-            shouldSaveRef.current = saveVideo;
-            mediaRecorderRef.current.stop();
+    const stopRecording = useCallback((salvaVideo = true) => {
+        if (registratoreRef.current && registratoreRef.current.state === "recording") {
+            vuoleSalvareRef.current = salvaVideo;
+            registratoreRef.current.stop();
             setIsRecording(false);
         }
     }, [setIsRecording]);

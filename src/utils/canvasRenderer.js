@@ -1,38 +1,33 @@
-/**
- * @file canvasRenderer.js
- * @description Modulo per il rendering grafico degli overlay topologici sul Canvas HTML.
- */
-
-import { EXERCISES, SKELETON_COLORS } from '../config/exercises';
+import { ESERCIZI, SKELETON_COLORS } from '../config/exercises';
 
 export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, hasError) {
-    let color = SKELETON_COLORS.active;
-    if (hasError) color = SKELETON_COLORS.warning;
-    else if (isTargetReached) color = SKELETON_COLORS.target;
+    let colore = SKELETON_COLORS.active;
+    if (hasError) colore = SKELETON_COLORS.warning;
+    else if (isTargetReached) colore = SKELETON_COLORS.target;
 
     ctx.lineWidth = 2;
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = colore;
 
-    const lmConfig = EXERCISES[ex]?.landmarks[side];
-    if (!lmConfig) return;
+    const cfgPunti = ESERCIZI[ex]?.landmarks[side];
+    if (!cfgPunti) return;
 
-    const baseConnections = [[lmConfig.shoulder, lmConfig.hip], [lmConfig.hip, lmConfig.knee], [lmConfig.knee, lmConfig.ankle]];
-    const armConnections = (ex === 'OVERHEAD_PRESS' || ex === 'DEADLIFT') && lmConfig.elbow
-        ? [[lmConfig.shoulder, lmConfig.elbow], [lmConfig.elbow, lmConfig.wrist]] : [];
+    const collegamentiBase = [[cfgPunti.shoulder, cfgPunti.hip], [cfgPunti.hip, cfgPunti.knee], [cfgPunti.knee, cfgPunti.ankle]];
+    const collegamentiBraccio = (ex === 'OVERHEAD_PRESS' || ex === 'DEADLIFT') && cfgPunti.elbow
+        ? [[cfgPunti.shoulder, cfgPunti.elbow], [cfgPunti.elbow, cfgPunti.wrist]] : [];
 
-    [...baseConnections, ...armConnections].forEach(([s, e]) => {
-        if (s === undefined || e === undefined) return;
-        const p1 = landmarks[s], p2 = landmarks[e];
+    [...collegamentiBase, ...collegamentiBraccio].forEach(([inizio, fine]) => {
+        if (inizio === undefined || fine === undefined) return;
+        const p1 = landmarks[inizio], p2 = landmarks[fine];
         if (p1 && p2 && p1.visibility > 0.2 && p2.visibility > 0.2) {
             ctx.beginPath(); ctx.moveTo(p1.x * w, p1.y * h); ctx.lineTo(p2.x * w, p2.y * h); ctx.stroke();
         }
     });
 
-    const hipPoint = landmarks[lmConfig.hip];
-    if (hipPoint && hipPoint.visibility > 0.2) {
+    const puntoAnca = landmarks[cfgPunti.hip];
+    if (puntoAnca && puntoAnca.visibility > 0.2) {
         ctx.beginPath();
         ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
-        ctx.arc(hipPoint.x * w, hipPoint.y * h, 6, 0, 2 * Math.PI);
+        ctx.arc(puntoAnca.x * w, puntoAnca.y * h, 6, 0, 2 * Math.PI);
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#ffffff';
@@ -45,11 +40,11 @@ export function drawSquatOverlays(ctx, w, h, kneePoint, isTargetReached, smoothe
         if (smoothedKneeYRef.current === null) smoothedKneeYRef.current = kneePoint.y;
         else smoothedKneeYRef.current = (kneePoint.y * 0.15) + (smoothedKneeYRef.current * 0.85);
 
-        const kneeY = smoothedKneeYRef.current * h;
+        const yGinocchio = smoothedKneeYRef.current * h;
         ctx.beginPath();
         ctx.setLineDash([8, 6]);
-        ctx.moveTo(0, kneeY);
-        ctx.lineTo(w, kneeY);
+        ctx.moveTo(0, yGinocchio);
+        ctx.lineTo(w, yGinocchio);
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#00ff88';
         ctx.stroke();
@@ -60,7 +55,6 @@ export function drawSquatOverlays(ctx, w, h, kneePoint, isTargetReached, smoothe
 export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, currentAngle) {
     ctx.save();
 
-    // Barra di telemetria superiore (Spostata da h-50 a 0)
     ctx.fillStyle = "rgba(0, 47, 108, 0.75)";
     ctx.fillRect(0, 0, w, 50);
 
@@ -72,9 +66,8 @@ export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, curren
     ctx.textAlign = "right";
     ctx.fillText(`ANGOLO: ${currentAngle ? Math.round(currentAngle) + '°' : '--'}`, w - 20, 34);
 
-    // Sistema a comparsa per Notifiche (Scalato sotto la barra principale, y = 50)
     ctx.textAlign = "center";
-    const now = performance.now();
+    const adesso = performance.now();
 
     if (isTrackingLost) {
         ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
@@ -83,7 +76,7 @@ export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, curren
         ctx.font = "bold 18px sans-serif";
         ctx.fillText("CORPO NON RILEVATO", w / 2, 76);
     }
-    else if (hudMessage && now < hudMessage.expires) {
+    else if (hudMessage && adesso < hudMessage.expires) {
         if (hudMessage.type === 'VALID') {
             ctx.fillStyle = "rgba(0, 255, 136, 0.9)";
             ctx.fillRect(0, 50, w, 40);

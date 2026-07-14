@@ -1,29 +1,25 @@
-/**
- * @file usePose.js
- */
-
 import { useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
 import { drawSkeleton, drawSquatOverlays, drawHUD } from '../utils/canvasRenderer';
-import { EXERCISES } from '../config/exercises';
+import { ESERCIZI } from '../config/exercises';
 
-export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
+export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logCallback) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const landmarkerRef = useRef(null);
-  const animFrameRef = useRef(null);
-  const repStateRef = useRef(createInitialState());
-  const isLoadingRef = useRef(true);
-  const prevAnglesRef = useRef({ primary: null, secondary: null });
-  const noLandmarkFrames = useRef(0);
-  const lastVideoTimeRef = useRef(-1);
-  const smoothedKneeYRef = useRef(null);
-  const isRecordingRef = useRef(isRecording);
+  const modelloRef = useRef(null);
+  const frameIdRef = useRef(null);
+  const statoRepRef = useRef(createInitialState());
+  const primoCaricamentoRef = useRef(true);
+  const angoliPrecRef = useRef({ primary: null, secondary: null });
+  const framePersiRef = useRef(0);
+  const ultimoTempoVideoRef = useRef(-1);
+  const ginocchioYSmoothRef = useRef(null);
+  const registrazioneRef = useRef(registrazioneAttiva);
 
-  const validRepsRef = useRef(0);
-  const noRepsRef = useRef(0);
-  const hudMessageRef = useRef(null);
+  const contatoreValideRef = useRef(0);
+  const contatoreNonValideRef = useRef(0);
+  const messaggioHudRef = useRef(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isTrackingLost, setIsTrackingLost] = useState(false);
@@ -35,30 +31,30 @@ export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
   const [angles, setAngles] = useState({ primary: null, secondary: null });
 
   useEffect(() => {
-    repStateRef.current = createInitialState();
-    prevAnglesRef.current = { primary: null, secondary: null };
-    noLandmarkFrames.current = 0;
-    smoothedKneeYRef.current = null;
+    statoRepRef.current = createInitialState();
+    angoliPrecRef.current = { primary: null, secondary: null };
+    framePersiRef.current = 0;
+    ginocchioYSmoothRef.current = null;
 
-    validRepsRef.current = 0;
-    noRepsRef.current = 0;
-    hudMessageRef.current = null;
+    contatoreValideRef.current = 0;
+    contatoreNonValideRef.current = 0;
+    messaggioHudRef.current = null;
 
     setValidReps(0);
     setNoReps(0);
     setFaults([]);
     setAngles({ primary: null, secondary: null });
     setIsTrackingLost(false);
-  }, [exercise, isActive, facingMode]);
+  }, [esercizio, attivo, latoCamera]);
 
   useEffect(() => {
-    isRecordingRef.current = isRecording;
-    if (isRecording) reset();
-  }, [isRecording]);
+    registrazioneRef.current = registrazioneAttiva;
+    if (registrazioneAttiva) reset();
+  }, [registrazioneAttiva]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function loadModel() {
+    let componenteMontato = true;
+    async function caricaModello() {
       try {
         const vision = await FilesetResolver.forVisionTasks('/wasm');
         const landmarker = await PoseLandmarker.createFromOptions(vision, {
@@ -66,69 +62,69 @@ export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
           runningMode: 'VIDEO',
           numPoses: 1,
         });
-        if (isMounted) landmarkerRef.current = landmarker;
+        if (componenteMontato) modelloRef.current = landmarker;
         else landmarker.close();
       } catch (err) {
-        if (isMounted) setError('Errore caricamento modello: ' + err.message);
+        if (componenteMontato) setError('Errore caricamento modello: ' + err.message);
       }
     }
-    loadModel();
+    caricaModello();
     return () => {
-      isMounted = false;
-      if (landmarkerRef.current) {
-        landmarkerRef.current.close();
-        landmarkerRef.current = null;
+      componenteMontato = false;
+      if (modelloRef.current) {
+        modelloRef.current.close();
+        modelloRef.current = null;
       }
     };
   }, []);
 
   useEffect(() => {
-    if (!isActive) return;
-    const videoElement = videoRef.current;
-    async function startCamera() {
+    if (!attivo) return;
+    const elVideo = videoRef.current;
+    async function avviaFotocamera() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode }, audio: false });
-        if (videoElement) {
-          videoElement.srcObject = stream;
-          videoElement.onloadedmetadata = () => videoElement.play();
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: latoCamera }, audio: false });
+        if (elVideo) {
+          elVideo.srcObject = stream;
+          elVideo.onloadedmetadata = () => elVideo.play();
         }
       } catch (err) {
         setError('Impossibile accedere al sensore ottico: ' + err.message);
       }
     }
-    startCamera();
+    avviaFotocamera();
     return () => {
-      if (videoElement?.srcObject) {
-        videoElement.srcObject.getTracks().forEach(t => t.stop());
-        videoElement.srcObject = null;
+      if (elVideo?.srcObject) {
+        elVideo.srcObject.getTracks().forEach(t => t.stop());
+        elVideo.srcObject = null;
       }
     };
-  }, [isActive, facingMode]);
+  }, [attivo, latoCamera]);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!attivo) return;
 
-    function detectCameraSide(landmarks) {
-      const leftVis = landmarks[11].visibility + landmarks[23].visibility + landmarks[25].visibility;
-      const rightVis = landmarks[12].visibility + landmarks[24].visibility + landmarks[26].visibility;
-      const leftZ = landmarks[11].z + landmarks[23].z + landmarks[25].z;
-      const rightZ = landmarks[12].z + landmarks[24].z + landmarks[26].z;
-      if (leftVis > rightVis + 0.2 && leftZ < rightZ) return 'LEFT';
-      if (rightVis > leftVis + 0.2 && rightZ < leftZ) return 'RIGHT';
-      return leftVis >= rightVis ? 'LEFT' : 'RIGHT';
+    function calcolaLatoInquadrato(punti) {
+      const visSx = punti[11].visibility + punti[23].visibility + punti[25].visibility;
+      const visDx = punti[12].visibility + punti[24].visibility + punti[26].visibility;
+      const zSx = punti[11].z + punti[23].z + punti[25].z;
+      const zDx = punti[12].z + punti[24].z + punti[26].z;
+      if (visSx > visDx + 0.2 && zSx < zDx) return 'LEFT';
+      if (visDx > visSx + 0.2 && zDx < zSx) return 'RIGHT';
+      return visSx >= visDx ? 'LEFT' : 'RIGHT';
     }
 
-    function loop() {
+    function ciclo() {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const landmarker = landmarkerRef.current;
+      const landmarker = modelloRef.current;
 
       if (video && canvas && landmarker && video.readyState >= 2) {
-        if (video.currentTime === lastVideoTimeRef.current) {
-          animFrameRef.current = requestAnimationFrame(loop);
+        if (video.currentTime === ultimoTempoVideoRef.current) {
+          frameIdRef.current = requestAnimationFrame(ciclo);
           return;
         }
-        lastVideoTimeRef.current = video.currentTime;
+        ultimoTempoVideoRef.current = video.currentTime;
 
         const ctx = canvas.getContext('2d');
         if (canvas.width !== video.videoWidth) {
@@ -138,90 +134,90 @@ export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const isMirrored = facingMode === 'user';
+        const specchiato = latoCamera === 'user';
         ctx.save();
-        if (isMirrored) {
+        if (specchiato) {
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
         }
 
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        if (isLoadingRef.current) {
-          setIsLoading(false); isLoadingRef.current = false;
+        if (primoCaricamentoRef.current) {
+          setIsLoading(false); primoCaricamentoRef.current = false;
         }
 
-        if (!isRecordingRef.current) {
+        if (!registrazioneRef.current) {
           ctx.restore();
-          drawHUD(ctx, canvas.width, canvas.height, validRepsRef.current, null, false, null);
-          animFrameRef.current = requestAnimationFrame(loop);
+          drawHUD(ctx, canvas.width, canvas.height, contatoreValideRef.current, null, false, null);
+          frameIdRef.current = requestAnimationFrame(ciclo);
           return;
         }
 
-        const results = landmarker.detectForVideo(video, performance.now());
-        let isTarget = false;
-        let dynamicSide = 'LEFT';
+        const risultati = landmarker.detectForVideo(video, performance.now());
+        let bersaglioOk = false;
+        let latoRilevato = 'LEFT';
 
-        if (results.landmarks?.length > 0) {
-          noLandmarkFrames.current = 0;
+        if (risultati.landmarks?.length > 0) {
+          framePersiRef.current = 0;
           setIsTrackingLost(prev => { if (prev) return false; return prev; });
 
-          const lms = results.landmarks[0];
-          dynamicSide = detectCameraSide(lms);
+          const punti = risultati.landmarks[0];
+          latoRilevato = calcolaLatoInquadrato(punti);
 
-          const processed = processFrame(exercise, repStateRef.current, lms, dynamicSide);
-          repStateRef.current = processed.state;
-          const { event, primaryAngle, secondaryAngle } = processed;
-          isTarget = processed.isTarget;
+          const esito = processFrame(esercizio, statoRepRef.current, punti, latoRilevato);
+          statoRepRef.current = esito.state;
+          const { event, primaryAngle, secondaryAngle } = esito;
+          bersaglioOk = esito.isTarget;
 
-          if (Math.abs((primaryAngle ?? 0) - (prevAnglesRef.current.primary ?? 0)) > 1 || Math.abs((secondaryAngle ?? 0) - (prevAnglesRef.current.secondary ?? 0)) > 1) {
+          if (Math.abs((primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1 || Math.abs((secondaryAngle ?? 0) - (angoliPrecRef.current.secondary ?? 0)) > 1) {
             setAngles({ primary: primaryAngle, secondary: secondaryAngle });
-            prevAnglesRef.current = { primary: primaryAngle, secondary: secondaryAngle };
+            angoliPrecRef.current = { primary: primaryAngle, secondary: secondaryAngle };
           }
 
           if (event?.type === 'VALID_REP' || event?.type === 'NO_REP') {
             const isValida = event.type === 'VALID_REP';
 
             if (isValida) {
-              validRepsRef.current += 1;
-              setValidReps(validRepsRef.current);
+              contatoreValideRef.current += 1;
+              setValidReps(contatoreValideRef.current);
               setFaults([]);
-              hudMessageRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + 2000 };
+              messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + 2000 };
             }
             else {
-              noRepsRef.current += 1;
-              setNoReps(noRepsRef.current);
+              contatoreNonValideRef.current += 1;
+              setNoReps(contatoreNonValideRef.current);
               setFaults(event.faults);
-              hudMessageRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + 3000 };
+              messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + 3000 };
             }
 
-            const timestamp = new Date();
-            if (onNewLog) {
-              onNewLog({
-                timestamp: timestamp.toISOString(),
-                time: timestamp.toLocaleTimeString('it-IT', { hour12: false }),
-                ex: exercise,
-                side: dynamicSide,
+            const adesso = new Date();
+            if (logCallback) {
+              logCallback({
+                timestamp: adesso.toISOString(),
+                time: adesso.toLocaleTimeString('it-IT', { hour12: false }),
+                ex: esercizio,
+                side: latoRilevato,
                 esito: event.type,
                 primaryAngle: primaryAngle === null ? '' : Math.round(primaryAngle),
-                finalState: repStateRef.current.movementState,
+                finalState: statoRepRef.current.movementState,
                 errori: event.faults?.length ? event.faults.join(' - ') : 'Nessuno',
               });
             }
           }
 
-          const isErrorActive = hudMessageRef.current && performance.now() < hudMessageRef.current.expires && hudMessageRef.current.type === 'INVALID';
+          const erroreLampeggiante = messaggioHudRef.current && performance.now() < messaggioHudRef.current.expires && messaggioHudRef.current.type === 'INVALID';
 
-          drawSkeleton(ctx, lms, canvas.width, canvas.height, isTarget, dynamicSide, exercise, isErrorActive);
+          drawSkeleton(ctx, punti, canvas.width, canvas.height, bersaglioOk, latoRilevato, esercizio, erroreLampeggiante);
 
-          if (exercise === 'SQUAT') {
-            const kneePoint = lms[EXERCISES.SQUAT.landmarks[dynamicSide].knee];
-            drawSquatOverlays(ctx, canvas.width, canvas.height, kneePoint, isTarget, smoothedKneeYRef);
+          if (esercizio === 'SQUAT') {
+            const puntoGinocchio = punti[ESERCIZI.SQUAT.landmarks[latoRilevato].knee];
+            drawSquatOverlays(ctx, canvas.width, canvas.height, puntoGinocchio, bersaglioOk, ginocchioYSmoothRef);
           }
 
         } else {
-          noLandmarkFrames.current++;
-          if (noLandmarkFrames.current > 30) {
+          framePersiRef.current++;
+          if (framePersiRef.current > 30) {
             setIsTrackingLost(prev => { if (!prev) return true; return prev; });
           }
         }
@@ -232,28 +228,28 @@ export function usePose(exercise, isActive, facingMode, isRecording, onNewLog) {
           ctx,
           canvas.width,
           canvas.height,
-          validRepsRef.current,
-          hudMessageRef.current,
-          noLandmarkFrames.current > 30,
-          repStateRef.current.lastAngle
+          contatoreValideRef.current,
+          messaggioHudRef.current,
+          framePersiRef.current > 30,
+          statoRepRef.current.lastAngle
         );
       }
-      animFrameRef.current = requestAnimationFrame(loop);
+      frameIdRef.current = requestAnimationFrame(ciclo);
     }
 
-    animFrameRef.current = requestAnimationFrame(loop);
-    return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
-  }, [exercise, isActive, facingMode]);
+    frameIdRef.current = requestAnimationFrame(ciclo);
+    return () => { if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
+  }, [esercizio, attivo, latoCamera]);
 
   function reset() {
-    repStateRef.current = createInitialState();
-    prevAnglesRef.current = { primary: null, secondary: null };
-    noLandmarkFrames.current = 0;
-    smoothedKneeYRef.current = null;
+    statoRepRef.current = createInitialState();
+    angoliPrecRef.current = { primary: null, secondary: null };
+    framePersiRef.current = 0;
+    ginocchioYSmoothRef.current = null;
 
-    validRepsRef.current = 0;
-    noRepsRef.current = 0;
-    hudMessageRef.current = null;
+    contatoreValideRef.current = 0;
+    contatoreNonValideRef.current = 0;
+    messaggioHudRef.current = null;
 
     setValidReps(0);
     setNoReps(0);
