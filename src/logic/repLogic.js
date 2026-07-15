@@ -93,7 +93,7 @@ function checkAscent(stato, angoloAttuale) {
   if (stato.lastAngleHistory.length > 5) {
     stato.lastAngleHistory.shift();
   }
-  if (stato.lastAngleHistory.length < 5) return false;
+  if (stato.lastAngleHistory.length < 3) return false;
 
   const angoloPiuVecchio = stato.lastAngleHistory[0];
   return angoloAttuale > angoloPiuVecchio + 3.0;
