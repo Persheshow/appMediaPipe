@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// https://vite.dev/config/
+
 export default defineConfig({
   plugins: [
     react(),
@@ -18,10 +18,10 @@ export default defineConfig({
         name: 'Analisi Cinematica',
         short_name: 'Cinematica',
         description: 'Strumento di tracciamento per Powerlifting',
-        theme_color: '#020617', // Si abbina a bg-slate-950
+        theme_color: '#020617',
         background_color: '#020617',
-        display: 'standalone', // Forza la modalità app a schermo intero
-        orientation: 'portrait', // Blocca la rotazione in verticale
+        display: 'standalone',
+        orientation: 'portrait',
         icons: [
           {
             src: 'favicon.svg',
