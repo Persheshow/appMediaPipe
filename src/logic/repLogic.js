@@ -234,25 +234,17 @@ export function processDeadlift(stato, landmarks, lato) {
     return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: eretto };
   }
 
-  m.lowestHipAngle = Math.min(m.lowestHipAngle ?? 180, angoloAnca);
-
-  if (stato.movementState === 'STANDING' || stato.movementState === 'DROPPING') {
+  if (stato.movementState !== 'LIFTING') {
     if (!eretto && yPolso > cfg.setupWristY) {
-      stato.movementState = 'SETUP';
-      m.minWristY = yPolso;
-      m.lowestHipAngle = angoloAnca;
-      m.repStartTime = adesso;
-    }
-  }
-  else if (stato.movementState === 'SETUP') {
-    m.minWristY = Math.max(m.minWristY, yPolso);
-    if (yPolso < m.minWristY - cfg.liftThreshold) {
       stato.movementState = 'LIFTING';
       m.maxWristYDuringLift = yPolso;
-      stato.lastAngleHistory = [];
+      m.repStartTime = adesso;
+    } else {
+      stato.movementState = 'STANDING';
+      m.maxWristYDuringLift = null;
+      m.repStartTime = null;
     }
-  }
-  else if (stato.movementState === 'LIFTING') {
+  } else {
     if (m.maxWristYDuringLift !== null && yPolso > m.maxWristYDuringLift + cfg.maxWristDropDuringLift) {
       const statoNuovo = createInitialState();
       statoNuovo.metrics.cooldownUntil = adesso + 2000;
@@ -266,25 +258,11 @@ export function processDeadlift(stato, landmarks, lato) {
     m.maxWristYDuringLift = Math.min(m.maxWristYDuringLift ?? yPolso, yPolso);
 
     if (eretto) {
-      const durataRep = adesso - m.repStartTime;
-
-      if (m.lowestHipAngle > cfg.minAttemptHip || durataRep < 800) {
-        stato.movementState = 'STANDING';
-        m.lowestHipAngle = 180;
-        m.maxWristYDuringLift = null;
-        return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: eretto };
-      }
-
       evento = { type: 'VALID_REP', faults: [] };
-      stato.movementState = 'LOCKED';
+      stato.movementState = 'STANDING';
       m.maxWristYDuringLift = null;
-      m.lowestHipAngle = 180;
+      m.repStartTime = null;
       m.cooldownUntil = adesso + 2000;
-    }
-  }
-  else if (stato.movementState === 'LOCKED') {
-    if (!eretto && yPolso > m.minWristY + cfg.dropThreshold) {
-      stato.movementState = 'DROPPING';
     }
   }
 
