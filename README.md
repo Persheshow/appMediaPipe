@@ -1,71 +1,74 @@
-# Analisi Cinematica in Tempo Reale tramite Computer Vision
+# Real-Time Kinematic Analysis via Computer Vision
 
-Progetto software sviluppato per il monitoraggio e la validazione biomeccanica di esercizi di forza (Powerlifting) attraverso l'impiego della Computer Vision. L'architettura sfrutta MediaPipe Pose Landmarker per la stima topologica dell'utente e implementa una serie di Macchine a Stati Finiti (FSM) per discernere istantaneamente le ripetizioni valide (secondo gli standard IPF) dai compensi tecnici.
+[🇮🇹 Leggi in Italiano](README.it.md) | [🇬🇧 Read in English](README.md)
 
-L'interfaccia, progettata con un rigoroso design istituzionale (Università degli Studi di Firenze), è ottimizzata per l'utilizzo sul campo tramite dispositivi mobili (PWA) e garantisce l'acquisizione, l'elaborazione e l'esportazione dei dati telemetrici in locale.
+Software project developed for the biomechanical monitoring and validation of strength exercises (Powerlifting) through the use of Computer Vision. The architecture leverages MediaPipe Pose Landmarker for topological user estimation and implements a set of Finite State Machines (FSM) to instantly distinguish valid repetitions (according to IPF standards) from technical compensations.
 
-## Architettura e Funzionalità
+The interface, designed with a rigorous institutional look (University of Florence), is optimized for field use on mobile devices (PWA) and ensures local acquisition, processing, and export of telemetry data.
 
-* **Tracciamento Topologico (Pose Estimation)**: Acquisizione del flusso video tramite l'API `navigator.mediaDevices` ed estrazione di 33 landmark corporei 3D a 60 FPS.
-* **Inferenza Edge (Local Execution)**: Allocazione in memoria del modello neurale `.task` e dei moduli WebAssembly (WASM) eseguiti interamente sul client (delegando i calcoli alla GPU locale), azzerando la latenza e garantendo la privacy.
-* **Filtraggio del Segnale (Smoothing)**: Applicazione di una Media Mobile Esponenziale (EMA) sui vettori angolari per mitigare il rumore ad alta frequenza (jittering) tipico dei sensori ottici.
-* **Macchine a Stati Finiti (FSM)**: Motori logici indipendenti per ogni alzata, progettati per tracciare le transizioni di fase (Setup, Eccentrica, Concentrica, Lockout).
-* **Supporto Hardware Dinamico**: Rilevamento automatico delle periferiche ottiche (multicamera) e switch on-the-fly tra sensore frontale e posteriore senza interruzione del thread di analisi.
-* **Esportazione Dataset (CSV)**: Generazione di log storici formattati con codifica UTF-8 BOM e delimitatori standard per l'incolonnamento nativo e l'analisi statistica su software come Excel, R o MATLAB.
+## Architecture and Features
 
-## Modelli Biomeccanici e Regolamenti (IPF Mode)
+* **Topological Tracking (Pose Estimation)**: Video stream acquisition via the `navigator.mediaDevices` API and extraction of 33 3D body landmarks at 60 FPS.
+* **Edge Inference (Local Execution)**: In-memory allocation of the `.task` neural model and WebAssembly (WASM) modules executed entirely on the client (offloading computation to the local GPU), eliminating latency and ensuring privacy.
+* **Signal Filtering (Smoothing)**: Application of an Exponential Moving Average (EMA) on angular vectors to mitigate high-frequency noise (jittering) typical of optical sensors.
+* **Finite State Machines (FSM)**: Independent logic engines for each lift, designed to track phase transitions (Setup, Eccentric, Concentric, Lockout).
+* **Dynamic Hardware Support**: Automatic detection of optical peripherals (multi-camera) and on-the-fly switching between front and rear sensors without interrupting the analysis thread.
+* **Dataset Export (CSV)**: Generation of historical logs formatted with UTF-8 BOM encoding and standard delimiters for native column alignment and statistical analysis in software such as Excel, R, or MATLAB.
+
+## Biomechanical Models and Regulations (IPF Mode)
 
 ### Squat
-La valutazione sfrutta il tracciamento del profilo laterale, calcolando l'angolo del ginocchio e la traslazione sull'asse Y dell'anca.
+Evaluation relies on lateral profile tracking, calculating the knee angle and hip translation along the Y-axis.
 
-* **Fase di Discesa**: Innescata dalla flessione del ginocchio rispetto al vettore di lockout iniziale.
-* **Validazione della Profondità (Parallelo)**: Confermata geometricamente quando la coordinata Y dell'anca supera lo zenit del ginocchio o quando l'articolazione raggiunge la soglia angolare critica di rottura.
-* **Transizione**: Rilevamento del punto di inversione cinematica tramite analisi derivata del buffer angolare.
-* **Criteri di Invalidazione**: Mancato superamento del parallelo; Target anatomico non rilevato (occlusione prolungata).
+* **Descent Phase**: Triggered by knee flexion relative to the initial lockout vector.
+* **Depth Validation (Parallel)**: Confirmed geometrically when the hip's Y coordinate surpasses the knee's zenith, or when the joint reaches the critical break angle threshold.
+* **Transition**: Detection of the kinematic inversion point via derivative analysis of the angular buffer.
+* **Invalidation Criteria**: Failure to reach parallel; anatomical target not detected (prolonged occlusion).
 
-### Stacco da Terra (Deadlift)
-Il sistema valuta l'estensione combinata di anca e ginocchio, utilizzando la coordinata spaziale del polso come proxy per il tracciamento della traiettoria del bilanciere.
+### Deadlift
+The system evaluates combined hip and knee extension, using the wrist's spatial coordinate as a proxy for tracking the barbell trajectory.
 
-* **Fase di Setup**: Registrazione del punto di minima elevazione del polso prima della spinta.
-* **Lockout**: Raggiungimento simultaneo dell'estensione target di anche e ginocchia.
-* **Criteri di Invalidazione**: Discesa del bilanciere durante la fase di tirata concentrica (rilevata tramite drop della coordinata Y del polso); Target anatomico non rilevato.
+* **Setup Phase**: Recording of the wrist's lowest elevation point before the pull.
+* **Lockout**: Simultaneous achievement of target hip and knee extension.
+* **Invalidation Criteria**: Bar descent during the concentric pull phase (detected via a drop in the wrist's Y coordinate); anatomical target not detected.
 
-### Pressa Militare (Overhead Press)
-Il modello monitora l'angolo di spinta del gomito, correlando i dati con la postura del tronco e delle articolazioni inferiori per rilevare compensi.
+### Overhead Press
+The model monitors the elbow's push angle, correlating the data with trunk posture and lower-joint position to detect compensations.
 
-* **Validazione (Lockout)**: Estensione completa dell'omero al di sopra della soglia critica.
-* **Criteri di Invalidazione**: Range di movimento incompleto; Iperlordosi lombare (calcolata tramite il tilt del tronco rispetto all'asse verticale); Uso delle gambe (flessione del ginocchio indicativa di un cheating in stile Push Press); Target anatomico non rilevato.
+* **Validation (Lockout)**: Full extension of the humerus above the critical threshold.
+* **Invalidation Criteria**: Incomplete range of motion; lumbar hyperlordosis (calculated via trunk tilt relative to the vertical axis); leg drive (knee flexion indicative of Push Press-style cheating); anatomical target not detected.
 
-## Limiti Sperimentali
+## Experimental Limitations
 
-Il prototipo è ottimizzato per l'analisi cinematica vettoriale 2D/3D da singola prospettiva laterale. Allo stato attuale, non convalida regole tecniche complesse che richiedono un'analisi multiprospettica o il rilevamento di oggetti esterni:
-* Staticità plantare (Squat/Deadlift).
-* Contatto fisico tra gomiti e ginocchia.
-* Hitching/Ramping (Stacco) senza il tracciamento fisico dell'hardware (bilanciere).
-* Analisi delle asimmetrie di spinta bilaterali.
-* Auto-calibrazione antropometrica delle soglie (attualmente definite staticamente in `config/exercises.js`).
+The prototype is optimized for 2D/3D vectorial kinematic analysis from a single lateral perspective. At its current stage, it does not validate complex technical rules that require multi-perspective analysis or external object detection:
+* Foot stability (Squat/Deadlift).
+* Physical contact between elbows and knees.
+* Hitching/Ramping (Deadlift) without physical tracking of the hardware (barbell).
+* Bilateral push asymmetry analysis.
+* Anthropometric auto-calibration of thresholds (currently statically defined in `config/exercises.js`).
 
-Questi confini applicativi rappresentano un punto di partenza per l'estensione futura della ricerca.
+These application boundaries represent a starting point for future research extension.
 
-## Stack Tecnologico
+## Tech Stack
 
-* **React 19**: Rendering UI e gestione dello stato reattivo.
-* **Vite 8**: Build tool e server di sviluppo.
+* **React 19**: UI rendering and reactive state management.
+* **Vite 8**: Build tool and development server.
 * **Tailwind CSS v4**: Utility-first CSS framework.
-* **MediaPipe Tasks Vision**: Rete neurale pre-addestrata per la Pose Estimation.
-* **vite-plugin-pwa**: Service worker generation per l'installazione nativa sui dispositivi mobili.
+* **MediaPipe Tasks Vision**: Pre-trained neural network for Pose Estimation.
+* **vite-plugin-pwa**: Service worker generation for native installation on mobile devices.
 
-## Requisiti di Sistema
+## System Requirements
 
-* Node.js (v18+ consigliato).
-* Browser basato su Chromium o WebKit compatibile con API WebGL e `navigator.mediaDevices`.
-* Per l'acquisizione: Fotocamera stabilizzata (treppiede) con inquadratura laterale pulita e ad alto contrasto.
+* Node.js (v18+ recommended).
+* Chromium- or WebKit-based browser compatible with the WebGL and `navigator.mediaDevices` APIs.
+* For acquisition: a stabilized camera (tripod) with a clean, high-contrast lateral framing.
 
-## Installazione e Avvio
+## Installation and Setup
 
-1. Clonare il repository locale.
-2. Accedere alla directory radice da terminale.
-3. Installare l'albero delle dipendenze:
+1. Clone the local repository.
+2. Navigate to the root directory from the terminal.
+3. Install the dependency tree:
 
    ```bash
    npm install
+   ```
