@@ -293,13 +293,14 @@ export function processDeadlift(stato, landmarks, lato) {
 }
 
 export function processOverheadPress(stato, landmarks, lato) {
+  // Semplificata: per contare la rep si verifica solo la stensione completa dell'omero
   const cfg = ESERCIZI.OVERHEAD_PRESS.thresholds;
   const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip, knee, ankle } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
 
+  // Verifica visibilità essenziale
   const visibile = lm[idxSpalla]?.visibility > 0.15 && lm[hip]?.visibility > 0.15 && lm[knee]?.visibility > 0.15 && lm[ankle]?.visibility > 0.15;
-
   if (!visibile) {
     const { shouldReset } = handleOcclusion(stato);
     if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
@@ -308,82 +309,72 @@ export function processOverheadPress(stato, landmarks, lato) {
   stato.occludedSince = null;
   checkTimeout(stato);
 
+  // Calcola solo l'angolo del gomito (ommerto/avampolso)
   const gomitoLm = getElbowLandmark(lm, idxGomito, lm[idxSpalla], lm[wrist]);
   const gomitoGrezzo = calculateAngle(lm[idxSpalla], gomitoLm, lm[wrist]);
   stato.smoothedPrimary = smoothAngle(stato.smoothedPrimary, gomitoGrezzo);
   const angoloGomito = stato.smoothedPrimary;
 
+  // Manteniamo comunque lo smoothing per il tronco come secondario (non usato per decisione rep)
   const verticale = { x: lm[idxSpalla].x, y: lm[idxSpalla].y - 0.1 };
   const troncoGrezzo = calculateAngle(verticale, lm[idxSpalla], lm[hip]);
   stato.smoothedSecondary = smoothAngle(stato.smoothedSecondary, troncoGrezzo);
   const angoloTronco = stato.smoothedSecondary;
 
-  const ginocchioGrezzo = calculateAngle(lm[hip], lm[knee], lm[ankle]);
   const m = stato.metrics;
-
-  const piegaGinocchio = m.startKneeAngle === null ? 0 : m.startKneeAngle - ginocchioGrezzo;
   let evento = null;
 
+  // Breve warmup iniziale per evitare rumore
   if (adesso - stato.startTime < 1000) {
     stato.lastAngle = angoloGomito;
     return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
   }
 
+  // Rispetta cooldown tra le rep
   if (adesso < m.cooldownUntil) {
     stato.lastAngle = angoloGomito;
     return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
   }
 
+  // Aggiorna metrica minima osservata durante la rep
   m.lowestElbowAngle = Math.min(m.lowestElbowAngle ?? 180, angoloGomito);
 
+  // Macchina a stati minima basata solo sull'angolo del gomito
   if (stato.movementState === 'STANDING') {
-    if (angoloGomito > cfg.topElbow) m.lockedAtStart = true;
-    if (m.startKneeAngle === null || angoloGomito > cfg.topElbow) m.startKneeAngle = ginocchioGrezzo;
-
-    if (angoloGomito < 140) {
+    // Se il gomito si flette abbastanza, inizia la fase di discesa
+    if (angoloGomito < cfg.bottomElbow) {
       stato.movementState = 'DESCENDING';
-      m.deepEnough = false;
-      m.faults = new Set();
       m.lowestElbowAngle = angoloGomito;
       m.repStartTime = adesso;
       stato.lastAngleHistory = [];
     }
   }
   else if (stato.movementState === 'DESCENDING') {
-    if (angoloGomito < cfg.bottomElbow) m.deepEnough = true;
-
-    if (angoloTronco > cfg.maxTrunkLean) m.faults.add('Iperlordosi lombare');
-    if (piegaGinocchio > cfg.maxKneeBend) m.faults.add('Uso delle gambe (Push press)');
-
-    if (checkAscent(stato, angoloGomito)) stato.movementState = 'ASCENDING';
+    // Rileva inversione di direzione verso l'alto
+    if (checkAscent(stato, angoloGomito)) {
+      stato.movementState = 'ASCENDING';
+    }
   }
   else if (stato.movementState === 'ASCENDING') {
-    if (angoloTronco > cfg.maxTrunkLean) m.faults.add('Iperlordosi lombare');
-    if (piegaGinocchio > cfg.maxKneeBend) m.faults.add('Uso delle gambe (Push press)');
-
+    // Se raggiunge la posizione completamente estesa -> conta la rep
     if (angoloGomito > cfg.topElbow) {
       const durataRep = adesso - m.repStartTime;
 
+      // Controllo minimo per evitare falsi positivi: durata e profondità minima
       if (m.lowestElbowAngle > cfg.minAttemptElbow || durataRep < 800) {
+        // Non conta come rep, resetta allo stato iniziale
         stato.movementState = 'STANDING';
-        m.deepEnough = false;
-        m.faults = new Set();
-        m.startKneeAngle = ginocchioGrezzo;
         m.lowestElbowAngle = 180;
         stato.lastAngleHistory = [];
+        stato.lastAngle = angoloGomito;
         return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
       }
 
-      if (!m.deepEnough) m.faults.add('Range di movimento incompleto');
+      // Rep valida (nessun altro controllo richiesto)
+      evento = { type: 'VALID_REP', faults: [] };
 
-      evento = m.faults.size === 0
-        ? { type: 'VALID_REP', faults: [] }
-        : { type: 'NO_REP', faults: Array.from(m.faults) };
-
+      // Reset
       stato.movementState = 'STANDING';
-      m.deepEnough = false;
-      m.faults = new Set();
-      m.startKneeAngle = ginocchioGrezzo;
       m.lowestElbowAngle = 180;
       stato.lastAngleHistory = [];
       m.cooldownUntil = adesso + 2000;
