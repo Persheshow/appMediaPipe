@@ -10,6 +10,32 @@ const NOMI_ESERCIZI = {
   OVERHEAD_PRESS: 'Pressa militare',
 };
 
+
+// Dati per il modale informativo
+const INFO_ESERCIZI = {
+  SQUAT: {
+    titolo: 'Esecuzione Squat',
+    videoSrc: '/assets/SquatDemo.mp4',
+    fonteVideo: 'JET Coaching TV',
+    linkVideo: 'https://www.youtube.com/watch?v=daDK0huWvfc',
+    descrizione: 'La validità dell\'alzata richiede che la coordinata Y dell\'anca scenda al di sotto dello zenit del ginocchio (sotto il parallelo). La risalita deve essere completata con la piena estensione di anche e ginocchia.'
+  },
+  DEADLIFT: {
+    titolo: 'Esecuzione Stacco da terra',
+    videoSrc: '/assets/DeadliftDemo.mp4',
+    fonteVideo: ' BodyFix Method \- Get Your Life Back\: Move Pain Free',
+    linkVideo: 'https://www.youtube.com/watch?v=GKtFw2Egc3Y',
+    descrizione: 'L\'alzata è valida al raggiungimento simultaneo della completa estensione di anche e ginocchia. È causa di invalidazione la flessione o la discesa del bilanciere durante la fase di trazione concentrica.'
+  },
+  OVERHEAD_PRESS: {
+    titolo: 'Esecuzione Pressa Militare',
+    videoSrc: '/assets/OverheadPressDemo.mp4',
+    fonteVideo: 'Brian DeBaets',
+    linkVideo: 'https://www.youtube.com/watch?v=bV21SQgC364',
+    descrizione: 'Il movimento è validato dalla completa estensione dell\'articolazione del gomito (lockout). È vietata la flessione delle ginocchia per generare spinta inerziale e l\'eccessiva iperestensione lombare.'
+  }
+};
+
 export default function App() {
   const [esercizioScelto, setEsercizioScelto] = useState('SQUAT');
   const [allenamentoAvviato, setAllenamentoAvviato] = useState(false);
@@ -17,6 +43,7 @@ export default function App() {
   const [cameraDoppia, setCameraDoppia] = useState(false);
   const [logSessione, setLogSessione] = useState([]);
   const [staRegistrando, setStaRegistrando] = useState(false);
+  const [infoModaleAperto, setInfoModaleAperto] = useState(false);
 
   const aggiungiLogRipetizione = (nuovoLog) => {
     setLogSessione(prev => [...prev, nuovoLog]);
@@ -83,7 +110,53 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white">
+    <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white relative">
+
+      {infoModaleAperto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#002f6c]/80 p-4 backdrop-blur-sm">
+          <div className="bg-white border border-[#002f6c] w-full max-w-md flex flex-col rounded-none shadow-2xl">
+
+            <div className="flex justify-between items-center border-b border-[#002f6c] p-4">
+              <h2 className="text-sm font-bold uppercase tracking-widest">{INFO_ESERCIZI[esercizioScelto].titolo}</h2>
+              <button onClick={() => setInfoModaleAperto(false)} className="text-[#002f6c] hover:bg-[#002f6c] hover:text-white px-2 py-1 border border-transparent hover:border-[#002f6c] transition-none">
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 flex flex-col gap-4">
+              <div className="w-full bg-gray-100 border border-[#002f6c] aspect-video relative flex items-center justify-center overflow-hidden">
+                <span className="absolute text-xs uppercase tracking-widest text-gray-400 z-0">Video non disponibile</span>
+                <video
+                  src={INFO_ESERCIZI[esercizioScelto].videoSrc}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  controls={false}
+                  className="w-full h-full object-cover relative z-10 pointer-events-none"
+                />
+              </div>
+
+              {/* Riferimento Copyright */}
+              <div className="flex justify-end -mt-2">
+                <a
+                  href={INFO_ESERCIZI[esercizioScelto].linkVideo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-[#002f6c] underline uppercase tracking-widest hover:opacity-70"
+                >
+                  © Fonte: {INFO_ESERCIZI[esercizioScelto].fonteVideo}
+                </a>
+              </div>
+
+              <p className="text-sm leading-relaxed text-justify border-t border-gray-200 pt-3">
+                {INFO_ESERCIZI[esercizioScelto].descrizione}
+              </p>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       <header className="w-full max-w-xl text-center flex flex-col items-center my-8">
         <img src={logoUnifi} alt="Logo Università degli Studi di Firenze" className="w-48 h-auto object-contain mb-8" />
@@ -96,7 +169,16 @@ export default function App() {
         <div className="w-full max-w-xl flex flex-col gap-6">
           <div className="bg-white border border-[#002f6c] rounded-none p-6 flex flex-col gap-8">
             <div className="flex flex-col gap-3">
-              <h3 className="text-xs uppercase tracking-widest mb-1">Esercizio</h3>
+              <div className="flex justify-between items-end mb-1">
+                <h3 className="text-xs uppercase tracking-widest">Esercizio</h3>
+                <button
+                  onClick={() => setInfoModaleAperto(true)}
+                  className="w-6 h-6 rounded-full border border-[#002f6c] flex items-center justify-center text-xs font-bold hover:bg-[#002f6c] hover:text-white transition-none"
+                  aria-label="Informazioni Esercizio"
+                >
+                  ?
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {Object.entries(NOMI_ESERCIZI).map(([chiave, etichetta]) => (
                   <button
@@ -200,7 +282,7 @@ export default function App() {
       )}
 
       {allenamentoAvviato && (
-        <footer className="w-full max-w-xl mt-6 mb-8">
+        <footer className="w-full max-w-xl mt-6 mb-8 flex flex-col gap-4">
           <button
             onClick={() => {
               if (staRegistrando) fermaRegistrazione(false);
@@ -212,6 +294,13 @@ export default function App() {
           </button>
         </footer>
       )}
+
+      <footer className="w-full max-w-xl mt-auto pt-12 pb-6 flex flex-col items-center gap-1.5 text-[#002f6c] text-center">
+        <div className="w-16 h-[1px] bg-[#002f6c] mb-4 opacity-50"></div>
+        <p className="text-[15px] uppercase tracking-wider">Corso di Laurea in Informatica</p>
+        <p className="text-[15px] uppercase tracking-wider">Sviluppato da Lorenzo Napolitano</p>
+        <p className="text-[15px] uppercase tracking-wider opacity-70">A.A. 2025/2026</p>
+      </footer>
 
       <SpeedInsights />
     </div>
