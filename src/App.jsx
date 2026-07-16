@@ -38,7 +38,7 @@ const INFO_ESERCIZI = {
 export default function App() {
   const [esercizioScelto, setEsercizioScelto] = useState('SQUAT');
   const [allenamentoAvviato, setAllenamentoAvviato] = useState(false);
-  const [cameraLato, setCameraLato] = useState('user');
+  const [cameraLato, setCameraLato] = useState('environment');
   const [cameraDoppia, setCameraDoppia] = useState(false);
   const [logSessione, setLogSessione] = useState([]);
   const [staRegistrando, setStaRegistrando] = useState(false);
