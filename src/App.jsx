@@ -10,7 +10,6 @@ const NOMI_ESERCIZI = {
   OVERHEAD_PRESS: 'Pressa militare',
 };
 
-
 const INFO_ESERCIZI = {
   SQUAT: {
     titolo: 'Esecuzione Squat',
@@ -22,7 +21,7 @@ const INFO_ESERCIZI = {
   DEADLIFT: {
     titolo: 'Esecuzione Stacco da terra',
     videoSrc: '/assets/DeadliftDemo.mp4',
-    fonteVideo: ' BodyFix Method \- Get Your Life Back\: Move Pain Free',
+    fonteVideo: ' BodyFix Method - Get Your Life Back: Move Pain Free',
     linkVideo: 'https://www.youtube.com/watch?v=GKtFw2Egc3Y',
     descrizione: 'L\'alzata è valida al raggiungimento della completa estensione di anche e ginocchia. È causa di invalidazione la discesa del bilanciere durante la fase di tirata.'
   },
@@ -35,10 +34,15 @@ const INFO_ESERCIZI = {
   }
 };
 
+const isMobileDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+};
+
 export default function App() {
   const [esercizioScelto, setEsercizioScelto] = useState('SQUAT');
   const [allenamentoAvviato, setAllenamentoAvviato] = useState(false);
-  const [cameraLato, setCameraLato] = useState('environment');
+  const [cameraLato, setCameraLato] = useState(isMobileDevice() ? 'environment' : 'user');
   const [cameraDoppia, setCameraDoppia] = useState(false);
   const [logSessione, setLogSessione] = useState([]);
   const [staRegistrando, setStaRegistrando] = useState(false);
@@ -91,8 +95,7 @@ export default function App() {
 
   useEffect(() => {
     async function trovaFotocamere() {
-      const suSmartphone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (suSmartphone) {
+      if (isMobileDevice()) {
         setCameraDoppia(true);
         return;
       }
@@ -194,8 +197,8 @@ export default function App() {
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs uppercase tracking-widest mb-1">2. Seleziona Fotocamera</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => setCameraLato('user')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${cameraLato === 'user' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Fotocamera Anteriore</button>
                   <button onClick={() => setCameraLato('environment')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${cameraLato === 'environment' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Fotocamera Posteriore</button>
+                  <button onClick={() => setCameraLato('user')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${cameraLato === 'user' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Fotocamera Anteriore</button>
                 </div>
               </div>
             )}
@@ -298,7 +301,6 @@ export default function App() {
         <p className="text-[15px] uppercase tracking-wider">Corso di Laurea in Informatica</p>
         <p className="text-[15px] uppercase tracking-wider opacity-70">A.A. 2025/2026</p>
       </footer>
-
       <SpeedInsights />
     </div>
   );
