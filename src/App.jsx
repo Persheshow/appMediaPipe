@@ -11,28 +11,27 @@ const NOMI_ESERCIZI = {
 };
 
 
-// Dati per il modale informativo
 const INFO_ESERCIZI = {
   SQUAT: {
     titolo: 'Esecuzione Squat',
     videoSrc: '/assets/SquatDemo.mp4',
     fonteVideo: 'JET Coaching TV',
     linkVideo: 'https://www.youtube.com/watch?v=daDK0huWvfc',
-    descrizione: 'La validità dell\'alzata richiede che la coordinata Y dell\'anca scenda al di sotto dello zenit del ginocchio (sotto il parallelo). La risalita deve essere completata con la piena estensione di anche e ginocchia.'
+    descrizione: 'La validità dell\'alzata richiede che l\'anca scenda al di sotto del parallelo. La risalita deve essere completata con la piena estensione di anche e ginocchia.'
   },
   DEADLIFT: {
     titolo: 'Esecuzione Stacco da terra',
     videoSrc: '/assets/DeadliftDemo.mp4',
     fonteVideo: ' BodyFix Method \- Get Your Life Back\: Move Pain Free',
     linkVideo: 'https://www.youtube.com/watch?v=GKtFw2Egc3Y',
-    descrizione: 'L\'alzata è valida al raggiungimento simultaneo della completa estensione di anche e ginocchia. È causa di invalidazione la flessione o la discesa del bilanciere durante la fase di trazione concentrica.'
+    descrizione: 'L\'alzata è valida al raggiungimento della completa estensione di anche e ginocchia. È causa di invalidazione la discesa del bilanciere durante la fase di tirata.'
   },
   OVERHEAD_PRESS: {
     titolo: 'Esecuzione Pressa Militare',
     videoSrc: '/assets/OverheadPressDemo.mp4',
     fonteVideo: 'Brian DeBaets',
     linkVideo: 'https://www.youtube.com/watch?v=bV21SQgC364',
-    descrizione: 'Il movimento è validato dalla completa estensione dell\'articolazione del gomito (lockout). È vietata la flessione delle ginocchia per generare spinta inerziale e l\'eccessiva iperestensione lombare.'
+    descrizione: 'Il movimento è validato dalla completa estensione del gomito. La discesa del bilanciere durante la fase di spinta è causa di invalidazione dell\'alzata.'
   }
 };
 
@@ -137,7 +136,6 @@ export default function App() {
                 />
               </div>
 
-              {/* Riferimento Copyright */}
               <div className="flex justify-end -mt-2">
                 <a
                   href={INFO_ESERCIZI[esercizioScelto].linkVideo}
