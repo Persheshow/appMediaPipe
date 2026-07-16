@@ -1,5 +1,17 @@
 import { ESERCIZI, SKELETON_COLORS } from '../config/exercises';
 
+// Variabili globali per gestire lo stato del watermark
+let watermarkMessaggio = null;
+let watermarkScadenza = 0;
+
+// Intercetta l'evento globale lanciato da repLogic.js
+if (typeof window !== 'undefined') {
+    window.addEventListener('execution_error', (e) => {
+        watermarkMessaggio = e.detail;
+        watermarkScadenza = Date.now() + 2500; // Il watermark dura 2.5 secondi
+    });
+}
+
 export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, hasError) {
     let colore = SKELETON_COLORS.active;
     if (hasError) colore = SKELETON_COLORS.warning;
@@ -55,17 +67,21 @@ export function drawSquatOverlays(ctx, w, h, kneePoint, isTargetReached, smoothe
 export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, currentAngle) {
     ctx.save();
 
+    // Sfondo barra superiore
     ctx.fillStyle = "rgba(0, 47, 108, 0.75)";
     ctx.fillRect(0, 0, w, 50);
 
+    // Contatore ripetizioni
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 24px sans-serif";
     ctx.textAlign = "left";
     ctx.fillText(`VALIDE: ${validReps}`, 20, 34);
 
+    // Angolo in tempo reale
     ctx.textAlign = "right";
     ctx.fillText(`ANGOLO: ${currentAngle ? Math.round(currentAngle) + '°' : '--'}`, w - 20, 34);
 
+    // Gestione messaggi del banner (tracking perso o esito singola rep)
     ctx.textAlign = "center";
     const adesso = performance.now();
 
@@ -90,6 +106,35 @@ export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, curren
             ctx.font = "bold 18px sans-serif";
             ctx.fillText(hudMessage.text.toUpperCase(), w / 2, 76);
         }
+    }
+
+    // --- WATERMARK CENTRALE OSTRUTTIVO ---
+    // Impresso direttamente sul Canvas per renderlo visibile nel file video scaricato
+    if (Date.now() < watermarkScadenza && watermarkMessaggio) {
+        // Sfondo rosso semitrasparente
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
+        ctx.fillRect(0, h / 2 - 60, w, 120);
+
+        // Bordi bianchi del banner
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, h / 2 - 60);
+        ctx.lineTo(w, h / 2 - 60);
+        ctx.moveTo(0, h / 2 + 60);
+        ctx.lineTo(w, h / 2 + 60);
+        ctx.stroke();
+
+        // Scrivi l'avviso di errore principale
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(watermarkMessaggio, w / 2, h / 2 - 10);
+
+        // Scrivi il sottotitolo esplicativo
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText("RALLENTA L'ESECUZIONE", w / 2, h / 2 + 30);
     }
 
     ctx.restore();
