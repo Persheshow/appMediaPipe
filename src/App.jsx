@@ -298,7 +298,6 @@ export default function App() {
       <footer className="w-full max-w-xl mt-auto pt-12 pb-6 flex flex-col items-center gap-1.5 text-[#002f6c] text-center">
         <div className="w-16 h-[1px] bg-[#002f6c] mb-4 opacity-50"></div>
         <p className="text-[15px] uppercase tracking-wider">Corso di Laurea in Informatica</p>
-        <p className="text-[15px] uppercase tracking-wider">Sviluppato da Lorenzo Napolitano</p>
         <p className="text-[15px] uppercase tracking-wider opacity-70">A.A. 2025/2026</p>
       </footer>
 
