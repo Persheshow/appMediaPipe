@@ -51,7 +51,7 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, ha
     }
 }
 
-export function drawSquatOverlays(ctx, w, h, kneePoint, isTargetReached, smoothedKneeYRef) {
+export function drawKneeOverlayLine(ctx, w, h, kneePoint, isTargetReached, smoothedKneeYRef) {
     if (kneePoint && kneePoint.visibility > 0.2) {
         if (smoothedKneeYRef.current === null) smoothedKneeYRef.current = kneePoint.y;
         else smoothedKneeYRef.current = (kneePoint.y * 0.15) + (smoothedKneeYRef.current * 0.85);

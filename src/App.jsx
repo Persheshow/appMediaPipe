@@ -52,10 +52,6 @@ export default function App() {
   const [fileCaricato, setFileCaricato] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
 
-  // Stati per la gestione del custom video player
-  const [videoProgress, setVideoProgress] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-
   const aggiungiLogRipetizione = (nuovoLog) => {
     setLogSessione(prev => [...prev, nuovoLog]);
   };
@@ -79,30 +75,6 @@ export default function App() {
 
   const { startRecording: avviaRegistrazione, stopRecording: fermaRegistrazione } =
     useVideoRecorder(canvasRef, setStaRegistrando);
-
-  // Sincronizzazione Player Video
-  useEffect(() => {
-    const videoEl = videoRef.current;
-    if (!videoEl || modalitaAcquisizione !== 'file') return;
-
-    const handleTimeUpdate = () => {
-      if (videoEl.duration) {
-        setVideoProgress((videoEl.currentTime / videoEl.duration) * 100);
-      }
-    };
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-
-    videoEl.addEventListener('timeupdate', handleTimeUpdate);
-    videoEl.addEventListener('play', handlePlay);
-    videoEl.addEventListener('pause', handlePause);
-
-    return () => {
-      videoEl.removeEventListener('timeupdate', handleTimeUpdate);
-      videoEl.removeEventListener('play', handlePlay);
-      videoEl.removeEventListener('pause', handlePause);
-    };
-  }, [modalitaAcquisizione, allenamentoAvviato]);
 
   const suonaBeep = () => {
     try {
@@ -241,7 +213,6 @@ export default function App() {
       ) : (
         <div className="w-full max-w-xl flex flex-col items-center">
 
-          {/* Rimosso min-h-[50vh] per far combaciare lo sfondo alla dimensione reale del file video */}
           <main className="w-full relative bg-white rounded-none overflow-hidden border border-[#002f6c]">
             {caricamentoModello && !erroreModello && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-10">
@@ -259,41 +230,6 @@ export default function App() {
               muted
             />
             <canvas ref={canvasRef} className="w-full h-auto block" />
-
-            {/* Custom Control Bar per Modalità File */}
-            {modalitaAcquisizione === 'file' && (
-              <div className="w-full bg-[#002f6c] p-3 flex items-center gap-4 border-t border-white/20">
-                <button
-                  onClick={() => {
-                    if (videoRef.current) {
-                      if (videoRef.current.paused) videoRef.current.play();
-                      else videoRef.current.pause();
-                    }
-                  }}
-                  className="text-white hover:text-gray-300 flex-shrink-0 transition-none"
-                >
-                  {isPlaying ? (
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-                  ) : (
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                  )}
-                </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={videoProgress}
-                  onChange={(e) => {
-                    if (videoRef.current && videoRef.current.duration) {
-                      videoRef.current.currentTime = (parseFloat(e.target.value) / 100) * videoRef.current.duration;
-                      setVideoProgress(parseFloat(e.target.value));
-                    }
-                  }}
-                  className="w-full h-1 bg-gray-400 rounded-full appearance-none cursor-pointer accent-white"
-                />
-              </div>
-            )}
 
             {modalitaAcquisizione === 'live' && cameraDoppia && !caricamentoModello && !erroreModello && !staRegistrando && (
               <button onClick={() => setCameraLato(prev => prev === 'user' ? 'environment' : 'user')} className="absolute bottom-4 right-4 bg-white border border-[#002f6c] text-[#002f6c] p-3 rounded-none z-30 transition-none hover:bg-[#002f6c] hover:text-white">
@@ -320,7 +256,7 @@ export default function App() {
                 : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
                 }`}
             >
-              {staRegistrando ? 'TERMINA ANALISI' : (modalitaAcquisizione === 'file' ? 'AVVIA ANALISI' : 'AVVIA ANALISI')}
+              {staRegistrando ? 'TERMINA ANALISI' : 'AVVIA ANALISI'}
             </button>
           )}
 

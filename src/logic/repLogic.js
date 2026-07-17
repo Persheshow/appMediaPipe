@@ -47,12 +47,11 @@ export function createInitialState() {
       lowestHipAngle: 180,
       fastRepCount: 0,
       lastFastRepTime: 0,
-      targetReached: false, // Nuova variabile per mantenere il puntino verde
+      targetReached: false,
     },
   };
 }
 
-// Funzione helper per gestire il trigger dell'overlay per esecuzioni multiple troppo veloci
 function gestisciOverlayVeloce(m, adesso, messaggio) {
   if (adesso - (m.lastFastRepTime || 0) > 5000) {
     m.fastRepCount = 0;
@@ -250,7 +249,6 @@ export function processDeadlift(stato, landmarks, lato) {
   const angoloGinocchio = stato.smoothedSecondary;
   const m = stato.metrics;
 
-  // SOGLIE DI LOCKOUT RESE PIÙ TOLLERANTI PER LA CAM 2D
   const lockoutGinocchio = (cfg.erectKnee || 165) - 25; // circa 140°
   const lockoutAnca = (cfg.erectHip || 165) - 20; // circa 145°
 
@@ -276,7 +274,7 @@ export function processDeadlift(stato, landmarks, lato) {
       stato.movementState = 'SETUP';
       stato.lastAngleHistory = [];
       m.repStartTime = adesso;
-      m.targetReached = false; // Spegne il puntino quando inizi la rep
+      m.targetReached = false;
     }
   }
   else if (stato.movementState === 'SETUP') {
@@ -309,7 +307,7 @@ export function processDeadlift(stato, landmarks, lato) {
       } else {
         m.fastRepCount = 0;
         evento = { type: 'VALID_REP', faults: [] };
-        m.targetReached = true; // Attiva il puntino verde e lo "blocca"
+        m.targetReached = true;
       }
 
       stato.movementState = 'STANDING';
