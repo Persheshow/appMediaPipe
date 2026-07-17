@@ -1,14 +1,12 @@
 import { ESERCIZI, SKELETON_COLORS } from '../config/exercises';
 
-// Variabili globali per gestire lo stato del watermark
 let watermarkMessaggio = null;
 let watermarkScadenza = 0;
 
-// Intercetta l'evento globale lanciato da repLogic.js
 if (typeof window !== 'undefined') {
     window.addEventListener('execution_error', (e) => {
         watermarkMessaggio = e.detail;
-        watermarkScadenza = Date.now() + 2500; // Il watermark dura 2.5 secondi
+        watermarkScadenza = Date.now() + 2500;
     });
 }
 
@@ -35,11 +33,17 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, ha
         }
     });
 
-    const puntoAnca = landmarks[cfgPunti.hip];
-    if (puntoAnca && puntoAnca.visibility > 0.2) {
+    let indicePuntoSnodo = cfgPunti.hip;
+    if (ex === 'OVERHEAD_PRESS') {
+        indicePuntoSnodo = cfgPunti.elbow;
+    }
+
+    const puntoEvidenziato = landmarks[indicePuntoSnodo];
+
+    if (puntoEvidenziato && puntoEvidenziato.visibility > 0.2) {
         ctx.beginPath();
         ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
-        ctx.arc(puntoAnca.x * w, puntoAnca.y * h, 6, 0, 2 * Math.PI);
+        ctx.arc(puntoEvidenziato.x * w, puntoEvidenziato.y * h, 6, 0, 2 * Math.PI);
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#ffffff';

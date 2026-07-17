@@ -47,13 +47,13 @@ export function createInitialState() {
       lowestHipAngle: 180,
       fastRepCount: 0,
       lastFastRepTime: 0,
+      targetReached: false, // Nuova variabile per mantenere il puntino verde
     },
   };
 }
 
 // Funzione helper per gestire il trigger dell'overlay per esecuzioni multiple troppo veloci
 function gestisciOverlayVeloce(m, adesso, messaggio) {
-  // Se sono passati più di 5 secondi dall'ultima rep veloce, azzera il contatore
   if (adesso - (m.lastFastRepTime || 0) > 5000) {
     m.fastRepCount = 0;
   }
@@ -61,10 +61,9 @@ function gestisciOverlayVeloce(m, adesso, messaggio) {
   m.fastRepCount = (m.fastRepCount || 0) + 1;
   m.lastFastRepTime = adesso;
 
-  // Se l'atleta fa 3 rep troppo veloci di fila, lancia l'overlay ostruttivo
   if (m.fastRepCount >= 3) {
     window.dispatchEvent(new CustomEvent('execution_error', { detail: messaggio }));
-    m.fastRepCount = 0; // Reset dopo aver lanciato l'allarme
+    m.fastRepCount = 0;
   }
 }
 
@@ -98,6 +97,7 @@ function checkTimeout(stato) {
   if (adesso - stato.lastActiveTime > 5000) {
     stato.movementState = 'STANDING';
     stato.metrics.deepEnough = false;
+    stato.metrics.targetReached = false;
     stato.metrics.faults = new Set();
     stato.metrics.lowestKneeAngle = 180;
     stato.metrics.lowestElbowAngle = 180;
@@ -188,7 +188,6 @@ export function processSquat(stato, landmarks, lato) {
 
       if (durataRep < 1000) {
         gestisciOverlayVeloce(m, adesso, 'ESECUZIONI TROPPO VELOCI');
-
         evento = { type: 'NO_REP', faults: ['Mancato superamento del parallelo'] };
         stato.movementState = 'STANDING';
         m.deepEnough = false;
@@ -198,7 +197,6 @@ export function processSquat(stato, landmarks, lato) {
         return { state: stato, event: evento, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
       }
 
-      // Se la rep ha una durata corretta, azzera il contatore dei fault veloci
       m.fastRepCount = 0;
 
       if (m.lowestKneeAngle > cfg.minAttemptKnee) {
@@ -252,7 +250,11 @@ export function processDeadlift(stato, landmarks, lato) {
   const angoloGinocchio = stato.smoothedSecondary;
   const m = stato.metrics;
 
-  const eretto = angoloGinocchio > cfg.erectKnee && angoloAnca > cfg.erectHip;
+  // SOGLIE DI LOCKOUT RESE PIÙ TOLLERANTI PER LA CAM 2D
+  const lockoutGinocchio = (cfg.erectKnee || 165) - 25; // circa 140°
+  const lockoutAnca = (cfg.erectHip || 165) - 20; // circa 145°
+
+  const eretto = angoloGinocchio > lockoutGinocchio && angoloAnca > lockoutAnca;
   const polsoVisibile = lm[wrist] && lm[wrist].visibility > 0.15;
   const yPolso = polsoVisibile ? lm[wrist].y : lm[hip].y + 0.3;
 
@@ -260,63 +262,65 @@ export function processDeadlift(stato, landmarks, lato) {
 
   if (adesso - stato.startTime < 1000) {
     stato.lastAngle = angoloAnca;
-    return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: eretto };
+    return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: m.targetReached || eretto };
   }
 
+  // Durante il cooldown il puntino rimane verde se la rep è stata chiusa con successo
   if (adesso < m.cooldownUntil) {
     stato.lastAngle = angoloAnca;
-    return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: eretto };
+    return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: m.targetReached || eretto };
   }
 
-  if (stato.movementState !== 'LIFTING') {
-    if (!eretto && yPolso > cfg.setupWristY) {
+  if (stato.movementState === 'STANDING') {
+    if (!eretto && angoloAnca < lockoutAnca - 15) {
+      stato.movementState = 'SETUP';
+      stato.lastAngleHistory = [];
+      m.repStartTime = adesso;
+      m.targetReached = false; // Spegne il puntino quando inizi la rep
+    }
+  }
+  else if (stato.movementState === 'SETUP') {
+    if (checkAscent(stato, angoloAnca)) {
       stato.movementState = 'LIFTING';
       m.maxWristYDuringLift = yPolso;
       m.repStartTime = adesso;
-    } else {
+    }
+  }
+  else if (stato.movementState === 'LIFTING') {
+    m.maxWristYDuringLift = Math.min(m.maxWristYDuringLift ?? yPolso, yPolso);
+    const tolleranzaDiscesa = cfg.maxWristDropDuringLift || 0.08;
+
+    if (yPolso > m.maxWristYDuringLift + tolleranzaDiscesa) {
+      evento = { type: 'NO_REP', faults: ['Discesa del bilanciere durante la tirata'] };
       stato.movementState = 'STANDING';
       m.maxWristYDuringLift = null;
-      m.repStartTime = null;
+      m.cooldownUntil = adesso + 1500;
+      m.targetReached = false;
+      return { state: stato, event: evento, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: eretto };
     }
-  } else {
-    if (m.maxWristYDuringLift !== null && yPolso > m.maxWristYDuringLift + cfg.maxWristDropDuringLift) {
-      const statoNuovo = createInitialState();
-      statoNuovo.metrics.cooldownUntil = adesso + 2000;
-      return {
-        state: statoNuovo,
-        event: { type: 'NO_REP', faults: ['Discesa del bilanciere durante la tirata'] },
-        primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: false,
-      };
-    }
-
-    m.maxWristYDuringLift = Math.min(m.maxWristYDuringLift ?? yPolso, yPolso);
 
     if (eretto) {
       const durataRep = adesso - m.repStartTime;
 
-      if (durataRep < 800) {
+      if (durataRep < 600) {
         gestisciOverlayVeloce(m, adesso, 'ESECUZIONI TROPPO VELOCI');
-
-        evento = { type: 'NO_REP', faults: ['Tirata troppo veloce'] };
-        stato.movementState = 'STANDING';
-        m.maxWristYDuringLift = null;
-        m.repStartTime = null;
-        m.cooldownUntil = adesso + 800;
-        return { state: stato, event: evento, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: eretto };
+        evento = { type: 'NO_REP', faults: ['Tirata troppo veloce / Rimbalzo'] };
+        m.targetReached = false;
+      } else {
+        m.fastRepCount = 0;
+        evento = { type: 'VALID_REP', faults: [] };
+        m.targetReached = true; // Attiva il puntino verde e lo "blocca"
       }
 
-      m.fastRepCount = 0;
-
-      evento = { type: 'VALID_REP', faults: [] };
       stato.movementState = 'STANDING';
       m.maxWristYDuringLift = null;
       m.repStartTime = null;
-      m.cooldownUntil = adesso + 800;
+      m.cooldownUntil = adesso + 1500;
     }
   }
 
   stato.lastAngle = angoloAnca;
-  return { state: stato, event: evento, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: eretto };
+  return { state: stato, event: evento, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: m.targetReached || eretto };
 }
 
 export function processOverheadPress(stato, landmarks, lato) {
@@ -349,12 +353,12 @@ export function processOverheadPress(stato, landmarks, lato) {
 
   if (adesso - stato.startTime < 1000) {
     stato.lastAngle = angoloGomito;
-    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
+    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
   }
 
   if (adesso < m.cooldownUntil) {
     stato.lastAngle = angoloGomito;
-    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
+    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
   }
 
   m.lowestElbowAngle = Math.min(m.lowestElbowAngle ?? 180, angoloGomito);
@@ -365,6 +369,7 @@ export function processOverheadPress(stato, landmarks, lato) {
       m.lowestElbowAngle = angoloGomito;
       m.repStartTime = adesso;
       stato.lastAngleHistory = [];
+      m.targetReached = false;
     }
   }
   else if (stato.movementState === 'DESCENDING') {
@@ -378,13 +383,13 @@ export function processOverheadPress(stato, landmarks, lato) {
 
       if (durataRep < 800) {
         gestisciOverlayVeloce(m, adesso, 'ESECUZIONI TROPPO VELOCI');
-
         evento = { type: 'NO_REP', faults: ['Spinta troppo veloce'] };
         stato.movementState = 'STANDING';
         m.lowestElbowAngle = 180;
         stato.lastAngleHistory = [];
         stato.lastAngle = angoloGomito;
         m.cooldownUntil = adesso + 800;
+        m.targetReached = false;
         return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
       }
 
@@ -404,11 +409,12 @@ export function processOverheadPress(stato, landmarks, lato) {
       m.lowestElbowAngle = 180;
       stato.lastAngleHistory = [];
       m.cooldownUntil = adesso + 800;
+      m.targetReached = true;
     }
   }
 
   stato.lastAngle = angoloGomito;
-  return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
+  return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
 }
 
 export function processFrame(esercizio, stato, landmarks, lato) {
