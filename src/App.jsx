@@ -52,6 +52,9 @@ export default function App() {
   const [fileCaricato, setFileCaricato] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
 
+  // Stato per il timer pre-start
+  const [contoAllaRovescia, setContoAllaRovescia] = useState(null);
+
   const aggiungiLogRipetizione = (nuovoLog) => {
     setLogSessione(prev => [...prev, nuovoLog]);
   };
@@ -122,6 +125,21 @@ export default function App() {
     }
     trovaFotocamere();
   }, []);
+
+  // Gestione del Timer Pre-Start
+  useEffect(() => {
+    if (contoAllaRovescia === null) return;
+
+    if (contoAllaRovescia > 0) {
+      const timerId = setTimeout(() => {
+        setContoAllaRovescia(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timerId);
+    } else {
+      avviaRegistrazione();
+      setContoAllaRovescia(null);
+    }
+  }, [contoAllaRovescia, avviaRegistrazione]);
 
   return (
     <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white relative">
@@ -231,7 +249,14 @@ export default function App() {
             />
             <canvas ref={canvasRef} className="w-full h-auto block" />
 
-            {modalitaAcquisizione === 'live' && cameraDoppia && !caricamentoModello && !erroreModello && !staRegistrando && (
+            {contoAllaRovescia !== null && contoAllaRovescia > 0 && (
+              <div className="absolute inset-0 z-40 flex flex-col items-center justify-center backdrop-blur-sm">
+                <span className="text-white text-6xl font-light tracking-widest">{contoAllaRovescia}</span>
+                <span className="text-white text-xs uppercase tracking-widest mt-4 opacity-70">Calibrazione in corso...</span>
+              </div>
+            )}
+
+            {modalitaAcquisizione === 'live' && cameraDoppia && !caricamentoModello && !erroreModello && !staRegistrando && contoAllaRovescia === null && (
               <button onClick={() => setCameraLato(prev => prev === 'user' ? 'environment' : 'user')} className="absolute bottom-4 right-4 bg-white border border-[#002f6c] text-[#002f6c] p-3 rounded-none z-30 transition-none hover:bg-[#002f6c] hover:text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
               </button>
@@ -244,19 +269,28 @@ export default function App() {
                 if (staRegistrando) {
                   fermaRegistrazione(true);
                   if (modalitaAcquisizione === 'file' && videoRef.current) videoRef.current.pause();
-                } else {
-                  avviaRegistrazione();
-                  if (modalitaAcquisizione === 'file' && videoRef.current) {
-                    videoRef.current.play();
+                } else if (contoAllaRovescia === null) {
+                  if (modalitaAcquisizione === 'live') {
+                    setContoAllaRovescia(3);
+                  } else {
+                    avviaRegistrazione();
+                    if (videoRef.current) videoRef.current.play();
                   }
                 }
               }}
-              className={`w-full mt-4 flex items-center justify-center gap-3 py-4 text-sm font-bold tracking-widest rounded-none border transition-none ${staRegistrando
-                ? 'bg-red-600 text-white border-red-600 animate-pulse'
-                : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
+              disabled={contoAllaRovescia !== null}
+              className={`w-full mt-4 flex items-center justify-center gap-3 py-4 text-sm font-bold tracking-widest rounded-none border transition-none ${contoAllaRovescia !== null
+                  ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
+                  : staRegistrando
+                    ? 'bg-red-600 text-white border-red-600 animate-pulse'
+                    : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
                 }`}
             >
-              {staRegistrando ? 'TERMINA ANALISI' : 'AVVIA ANALISI'}
+              {contoAllaRovescia !== null
+                ? 'PREPARAZIONE...'
+                : staRegistrando
+                  ? 'TERMINA ANALISI'
+                  : (modalitaAcquisizione === 'file' ? 'AVVIA ANALISI' : 'INIZIA ESERCIZIO')}
             </button>
           )}
 
@@ -297,6 +331,7 @@ export default function App() {
             onClick={() => {
               if (staRegistrando) fermaRegistrazione(false);
               setAllenamentoAvviato(false);
+              setContoAllaRovescia(null);
             }}
             className="w-full py-4 bg-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none hover:bg-[#002f6c] hover:text-white"
           >
