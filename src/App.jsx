@@ -168,7 +168,7 @@ export default function App() {
       <header className="w-full max-w-xl text-center flex flex-col items-center my-8">
         <img src={logoUnifi} alt="Logo Università degli Studi di Firenze" className="w-48 h-auto object-contain mb-8" />
         <h1 className="text-2xl uppercase tracking-widest leading-tight">
-          Analisi cinematica in tempo reale per il riconoscimento di ripetizioni valide di esercizi di powerlifting
+          Analisi cinematica per il riconoscimento di ripetizioni valide di esercizi di powerlifting
         </h1>
       </header>
 
