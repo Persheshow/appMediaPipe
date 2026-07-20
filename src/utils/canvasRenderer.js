@@ -1,4 +1,4 @@
-import { ESERCIZI, SKELETON_COLORS } from '../config/exercises';
+import { ESERCIZI, SKELETON_COLORS, ENGINE } from '../config/exercises';
 
 let watermarkMessaggio = null;
 let watermarkScadenza = 0;
@@ -6,7 +6,7 @@ let watermarkScadenza = 0;
 if (typeof window !== 'undefined') {
     window.addEventListener('execution_error', (e) => {
         watermarkMessaggio = e.detail;
-        watermarkScadenza = Date.now() + 2500;
+        watermarkScadenza = Date.now() + ENGINE.WATERMARK_MS;
     });
 }
 
@@ -55,7 +55,6 @@ export function drawSquatOverlays(ctx, w, h, kneePoint, isTargetReached, smoothe
     if (kneePoint && kneePoint.visibility > 0.2) {
         if (smoothedKneeYRef.current === null) smoothedKneeYRef.current = kneePoint.y;
         else smoothedKneeYRef.current = (kneePoint.y * 0.15) + (smoothedKneeYRef.current * 0.85);
-
         const yGinocchio = smoothedKneeYRef.current * h;
         ctx.beginPath();
         ctx.setLineDash([8, 6]);
@@ -70,25 +69,16 @@ export function drawSquatOverlays(ctx, w, h, kneePoint, isTargetReached, smoothe
 
 export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, currentAngle) {
     ctx.save();
-
-    // Sfondo barra superiore
     ctx.fillStyle = "rgba(0, 47, 108, 0.75)";
     ctx.fillRect(0, 0, w, 50);
-
-    // Contatore ripetizioni
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 24px sans-serif";
     ctx.textAlign = "left";
     ctx.fillText(`VALIDE: ${validReps}`, 20, 34);
-
-    // Angolo in tempo reale
     ctx.textAlign = "right";
     ctx.fillText(`ANGOLO: ${currentAngle ? Math.round(currentAngle) + '°' : '--'}`, w - 20, 34);
-
-    // Gestione messaggi del banner (tracking perso o esito singola rep)
     ctx.textAlign = "center";
     const adesso = performance.now();
-
     if (isTrackingLost) {
         ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
         ctx.fillRect(0, 50, w, 40);
@@ -113,13 +103,9 @@ export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, curren
     }
 
     // --- WATERMARK CENTRALE OSTRUTTIVO ---
-    // Impresso direttamente sul Canvas per renderlo visibile nel file video scaricato
     if (Date.now() < watermarkScadenza && watermarkMessaggio) {
-        // Sfondo rosso semitrasparente
         ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
         ctx.fillRect(0, h / 2 - 60, w, 120);
-
-        // Bordi bianchi del banner
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -128,15 +114,11 @@ export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, curren
         ctx.moveTo(0, h / 2 + 60);
         ctx.lineTo(w, h / 2 + 60);
         ctx.stroke();
-
-        // Scrivi l'avviso di errore principale
         ctx.fillStyle = 'white';
         ctx.font = 'bold 28px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(watermarkMessaggio, w / 2, h / 2 - 10);
-
-        // Scrivi il sottotitolo esplicativo
         ctx.font = 'bold 12px sans-serif';
         ctx.fillText("RALLENTA L'ESECUZIONE", w / 2, h / 2 + 30);
     }

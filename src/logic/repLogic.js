@@ -1,4 +1,12 @@
-import { ESERCIZI, SMOOTHING } from '../config/exercises.js';
+import { ESERCIZI, SMOOTHING, ENGINE } from '../config/exercises.js';
+
+/**
+ * NOTA DI PROGETTAZIONE:
+ * Le tre FSM (Squat, Stacco, Pressa) non sono state unificate in un unico motore
+ * generico. Squat e Pressa condividono la stessa topologia a 3 stati basata su
+ * soglia d'angolo singola (STANDING → DESCENDING → ASCENDING → validazione),
+ * ma lo Stacco ha una topologia diversa.
+ */
 
 export function smoothAngle(prev, current) {
   if (prev === null) return current;
@@ -38,7 +46,6 @@ export function createInitialState() {
       lockedAtStart: false,
       deepEnough: false,
       minWristY: 1.0,
-      maxWristYDuringLift: null,
       startKneeAngle: null,
       cooldownUntil: 0,
       repStartTime: 0,
@@ -53,14 +60,14 @@ export function createInitialState() {
 }
 
 function gestisciOverlayVeloce(m, adesso, messaggio) {
-  if (adesso - (m.lastFastRepTime || 0) > 5000) {
+  if (adesso - (m.lastFastRepTime || 0) > ENGINE.FAST_REP_WINDOW_MS) {
     m.fastRepCount = 0;
   }
 
   m.fastRepCount = (m.fastRepCount || 0) + 1;
   m.lastFastRepTime = adesso;
 
-  if (m.fastRepCount >= 3) {
+  if (m.fastRepCount >= ENGINE.FAST_REP_TRIGGER_COUNT) {
     window.dispatchEvent(new CustomEvent('execution_error', { detail: messaggio }));
     m.fastRepCount = 0;
   }
@@ -70,19 +77,19 @@ function getShoulderLandmark(lm, idxPrincipale, anca) {
   const idxOpposto = idxPrincipale === 11 ? 12 : 11;
   const principale = lm[idxPrincipale];
   const opposto = lm[idxOpposto];
-  if (principale && principale.visibility > 0.15) return principale;
-  if (opposto && opposto.visibility > 0.15) return { ...opposto, x: 1 - opposto.x };
-  return { x: anca.x, y: anca.y - 0.25, visibility: 0.15 };
+  if (principale && principale.visibility > ENGINE.VISIBILITY_THRESHOLD) return principale;
+  if (opposto && opposto.visibility > ENGINE.VISIBILITY_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
+  return { x: anca.x, y: anca.y - 0.25, visibility: ENGINE.VISIBILITY_THRESHOLD };
 }
 
 function getElbowLandmark(lm, idxPrincipale, spalla, polso) {
   const idxOpposto = idxPrincipale === 13 ? 14 : 13;
   const principale = lm[idxPrincipale];
   const opposto = lm[idxOpposto];
-  if (principale && principale.visibility > 0.15) return principale;
-  if (opposto && opposto.visibility > 0.15) return { ...opposto, x: 1 - opposto.x };
+  if (principale && principale.visibility > ENGINE.VISIBILITY_THRESHOLD) return principale;
+  if (opposto && opposto.visibility > ENGINE.VISIBILITY_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
   if (spalla && polso) {
-    return { x: (spalla.x + polso.x) / 2, y: (spalla.y + polso.y) / 2, visibility: 0.15 };
+    return { x: (spalla.x + polso.x) / 2, y: (spalla.y + polso.y) / 2, visibility: ENGINE.VISIBILITY_THRESHOLD };
   }
   return principale;
 }
@@ -93,7 +100,7 @@ function checkTimeout(stato) {
     stato.lastActiveTime = adesso;
     return;
   }
-  if (adesso - stato.lastActiveTime > 5000) {
+  if (adesso - stato.lastActiveTime > ENGINE.SESSION_TIMEOUT_MS) {
     stato.movementState = 'STANDING';
     stato.metrics.deepEnough = false;
     stato.metrics.targetReached = false;
@@ -108,13 +115,13 @@ function checkTimeout(stato) {
 
 function checkAscent(stato, angoloAttuale) {
   stato.lastAngleHistory.push(angoloAttuale);
-  if (stato.lastAngleHistory.length > 5) {
+  if (stato.lastAngleHistory.length > ENGINE.ASCENT_HISTORY_LEN) {
     stato.lastAngleHistory.shift();
   }
   if (stato.lastAngleHistory.length < 3) return false;
 
   const angoloPiuVecchio = stato.lastAngleHistory[0];
-  return angoloAttuale > angoloPiuVecchio + 3.0;
+  return angoloAttuale > angoloPiuVecchio + ENGINE.ASCENT_MIN_DELTA_DEG;
 }
 
 function handleOcclusion(stato) {
@@ -122,10 +129,35 @@ function handleOcclusion(stato) {
     stato.occludedSince = Date.now();
     return { occluded: true, shouldReset: false };
   }
-  if (Date.now() - stato.occludedSince > 1000 && stato.movementState !== 'STANDING') {
+  if (Date.now() - stato.occludedSince > ENGINE.OCCLUSION_RESET_MS && stato.movementState !== 'STANDING') {
     return { occluded: true, shouldReset: true };
   }
   return { occluded: true, shouldReset: false };
+}
+
+/**
+ * Helper condiviso dalle tre FSM: verifica che i landmark richiesti per
+ * l'esercizio siano sufficientemente visibili, gestisce l'occlusione
+ * temporanea (con reset dopo ENGINE.OCCLUSION_RESET_MS) e il timeout di
+ * sessione. Ritorna `{ ok: false, result }` con l'early-return già pronto da
+ * restituire al chiamante se i landmark non sono visibili, oppure
+ * `{ ok: true }` se il chiamante può proseguire con la propria logica.
+ */
+function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti) {
+  const visibile = indiciRichiesti.every((i) => lm[i]?.visibility > ENGINE.VISIBILITY_THRESHOLD);
+
+  if (!visibile) {
+    const { shouldReset } = handleOcclusion(stato);
+    const statoRisultante = shouldReset ? createInitialState() : stato;
+    return {
+      ok: false,
+      result: { state: statoRisultante, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false },
+    };
+  }
+
+  stato.occludedSince = null;
+  checkTimeout(stato);
+  return { ok: true };
 }
 
 export function processSquat(stato, landmarks, lato) {
@@ -134,15 +166,8 @@ export function processSquat(stato, landmarks, lato) {
   const lm = landmarks;
   const adesso = Date.now();
 
-  const visibile = lm[hip]?.visibility > 0.15 && lm[knee]?.visibility > 0.15 && lm[ankle]?.visibility > 0.15;
-
-  if (!visibile) {
-    const { shouldReset } = handleOcclusion(stato);
-    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
-    return { state: stato, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
-  }
-  stato.occludedSince = null;
-  checkTimeout(stato);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle]);
+  if (!guardia.ok) return guardia.result;
 
   const ginocchioGrezzo = calculateAngle(lm[hip], lm[knee], lm[ankle]);
   stato.smoothedPrimary = smoothAngle(stato.smoothedPrimary, ginocchioGrezzo);
@@ -150,7 +175,7 @@ export function processSquat(stato, landmarks, lato) {
   const m = stato.metrics;
   let evento = null;
 
-  if (adesso - stato.startTime < 1000) {
+  if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
     stato.lastAngle = angoloGinocchio;
     return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
   }
@@ -185,14 +210,14 @@ export function processSquat(stato, landmarks, lato) {
     if (angoloGinocchio > cfg.topKnee) {
       const durataRep = adesso - m.repStartTime;
 
-      if (durataRep < 1000) {
+      if (durataRep < cfg.minRepDurationMs) {
         gestisciOverlayVeloce(m, adesso, 'ESECUZIONI TROPPO VELOCI');
         evento = { type: 'NO_REP', faults: ['Mancato superamento del parallelo'] };
         stato.movementState = 'STANDING';
         m.deepEnough = false;
         m.lowestKneeAngle = 180;
         stato.lastAngleHistory = [];
-        m.cooldownUntil = adesso + 800;
+        m.cooldownUntil = adesso + cfg.cooldownMs;
         return { state: stato, event: evento, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
       }
 
@@ -214,7 +239,7 @@ export function processSquat(stato, landmarks, lato) {
       m.deepEnough = false;
       m.lowestKneeAngle = 180;
       stato.lastAngleHistory = [];
-      m.cooldownUntil = adesso + 800;
+      m.cooldownUntil = adesso + cfg.cooldownMs;
     }
   }
 
@@ -224,19 +249,12 @@ export function processSquat(stato, landmarks, lato) {
 
 export function processDeadlift(stato, landmarks, lato) {
   const cfg = ESERCIZI.DEADLIFT.thresholds;
-  const { shoulder: idxSpalla, hip, knee, ankle, wrist } = ESERCIZI.DEADLIFT.landmarks[lato];
+  const { shoulder: idxSpalla, hip, knee, ankle } = ESERCIZI.DEADLIFT.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
 
-  const visibile = lm[hip]?.visibility > 0.15 && lm[knee]?.visibility > 0.15;
-
-  if (!visibile) {
-    const { shouldReset } = handleOcclusion(stato);
-    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
-    return { state: stato, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
-  }
-  stato.occludedSince = null;
-  checkTimeout(stato);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee]);
+  if (!guardia.ok) return guardia.result;
 
   const spallaLm = getShoulderLandmark(lm, idxSpalla, lm[hip]);
   const ginocchioGrezzo = calculateAngle(lm[hip], lm[knee], lm[ankle]);
@@ -253,17 +271,14 @@ export function processDeadlift(stato, landmarks, lato) {
   const lockoutAnca = (cfg.erectHip || 165) - 20; // circa 145°
 
   const eretto = angoloGinocchio > lockoutGinocchio && angoloAnca > lockoutAnca;
-  const polsoVisibile = lm[wrist] && lm[wrist].visibility > 0.15;
-  const yPolso = polsoVisibile ? lm[wrist].y : lm[hip].y + 0.3;
 
   let evento = null;
 
-  if (adesso - stato.startTime < 1000) {
+  if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
     stato.lastAngle = angoloAnca;
     return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: m.targetReached || eretto };
   }
 
-  // Durante il cooldown il puntino rimane verde se la rep è stata chiusa con successo
   if (adesso < m.cooldownUntil) {
     stato.lastAngle = angoloAnca;
     return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: m.targetReached || eretto };
@@ -280,40 +295,17 @@ export function processDeadlift(stato, landmarks, lato) {
   else if (stato.movementState === 'SETUP') {
     if (checkAscent(stato, angoloAnca)) {
       stato.movementState = 'LIFTING';
-      m.maxWristYDuringLift = yPolso;
       m.repStartTime = adesso;
     }
   }
   else if (stato.movementState === 'LIFTING') {
-    m.maxWristYDuringLift = Math.min(m.maxWristYDuringLift ?? yPolso, yPolso);
-    const tolleranzaDiscesa = cfg.maxWristDropDuringLift || 0.08;
-
-    if (yPolso > m.maxWristYDuringLift + tolleranzaDiscesa) {
-      evento = { type: 'NO_REP', faults: ['Discesa del bilanciere durante la tirata'] };
-      stato.movementState = 'STANDING';
-      m.maxWristYDuringLift = null;
-      m.cooldownUntil = adesso + 1500;
-      m.targetReached = false;
-      return { state: stato, event: evento, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: eretto };
-    }
-
     if (eretto) {
-      const durataRep = adesso - m.repStartTime;
-
-      if (durataRep < 600) {
-        gestisciOverlayVeloce(m, adesso, 'ESECUZIONI TROPPO VELOCI');
-        evento = { type: 'NO_REP', faults: ['Tirata troppo veloce / Rimbalzo'] };
-        m.targetReached = false;
-      } else {
-        m.fastRepCount = 0;
-        evento = { type: 'VALID_REP', faults: [] };
-        m.targetReached = true;
-      }
+      evento = { type: 'VALID_REP', faults: [] };
+      m.targetReached = true;
 
       stato.movementState = 'STANDING';
-      m.maxWristYDuringLift = null;
       m.repStartTime = null;
-      m.cooldownUntil = adesso + 1500;
+      m.cooldownUntil = adesso + cfg.cooldownMs;
     }
   }
 
@@ -327,20 +319,13 @@ export function processOverheadPress(stato, landmarks, lato) {
   const lm = landmarks;
   const adesso = Date.now();
 
-  const visibile = lm[idxSpalla]?.visibility > 0.15 && lm[hip]?.visibility > 0.15 && lm[knee]?.visibility > 0.15 && lm[ankle]?.visibility > 0.15;
-  if (!visibile) {
-    const { shouldReset } = handleOcclusion(stato);
-    if (shouldReset) return { state: createInitialState(), event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
-    return { state: stato, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false };
-  }
-  stato.occludedSince = null;
-  checkTimeout(stato);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, hip, knee, ankle]);
+  if (!guardia.ok) return guardia.result;
 
   const gomitoLm = getElbowLandmark(lm, idxGomito, lm[idxSpalla], lm[wrist]);
   const gomitoGrezzo = calculateAngle(lm[idxSpalla], gomitoLm, lm[wrist]);
   stato.smoothedPrimary = smoothAngle(stato.smoothedPrimary, gomitoGrezzo);
   const angoloGomito = stato.smoothedPrimary;
-
   const verticale = { x: lm[idxSpalla].x, y: lm[idxSpalla].y - 0.1 };
   const troncoGrezzo = calculateAngle(verticale, lm[idxSpalla], lm[hip]);
   stato.smoothedSecondary = smoothAngle(stato.smoothedSecondary, troncoGrezzo);
@@ -349,7 +334,7 @@ export function processOverheadPress(stato, landmarks, lato) {
   const m = stato.metrics;
   let evento = null;
 
-  if (adesso - stato.startTime < 1000) {
+  if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
     stato.lastAngle = angoloGomito;
     return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
   }
@@ -379,14 +364,14 @@ export function processOverheadPress(stato, landmarks, lato) {
     if (angoloGomito > cfg.topElbow) {
       const durataRep = adesso - m.repStartTime;
 
-      if (durataRep < 800) {
+      if (durataRep < cfg.minRepDurationMs) {
         gestisciOverlayVeloce(m, adesso, 'ESECUZIONI TROPPO VELOCI');
         evento = { type: 'NO_REP', faults: ['Spinta troppo veloce'] };
         stato.movementState = 'STANDING';
         m.lowestElbowAngle = 180;
         stato.lastAngleHistory = [];
         stato.lastAngle = angoloGomito;
-        m.cooldownUntil = adesso + 800;
+        m.cooldownUntil = adesso + cfg.cooldownMs;
         m.targetReached = false;
         return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
       }
@@ -406,7 +391,7 @@ export function processOverheadPress(stato, landmarks, lato) {
       stato.movementState = 'STANDING';
       m.lowestElbowAngle = 180;
       stato.lastAngleHistory = [];
-      m.cooldownUntil = adesso + 800;
+      m.cooldownUntil = adesso + cfg.cooldownMs;
       m.targetReached = true;
     }
   }

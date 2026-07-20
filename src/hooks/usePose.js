@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
 import { drawSkeleton, drawSquatOverlays, drawHUD } from '../utils/canvasRenderer';
-import { ESERCIZI } from '../config/exercises';
+import { determinaLatoInquadrato } from '../utils/poseUtils';
+import { ESERCIZI, ENGINE } from '../config/exercises';
 
 export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logCallback, videoUrl) {
   const videoRef = useRef(null);
@@ -21,11 +22,9 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
   const ultimoPuntiRef = useRef(null);
   const ultimoLatoRef = useRef('LEFT');
   const ultimoBersaglioRef = useRef(false);
-
   const contatoreValideRef = useRef(0);
   const contatoreNonValideRef = useRef(0);
   const messaggioHudRef = useRef(null);
-
   const [isLoading, setIsLoading] = useState(true);
   const [isTrackingLost, setIsTrackingLost] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('Inizializzazione Modello...');
@@ -41,7 +40,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
     framePersiRef.current = 0;
     ginocchioYSmoothRef.current = null;
     ultimoPuntiRef.current = null;
-
     contatoreValideRef.current = 0;
     contatoreNonValideRef.current = 0;
     messaggioHudRef.current = null;
@@ -93,8 +91,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
         elVideo.srcObject = null;
         elVideo.src = videoUrl;
         elVideo.load();
-
-        // Forza il caricamento del primo frame visivo appena i dati sono pronti (Placeholder)
         elVideo.onloadeddata = () => {
           elVideo.currentTime = 0.001;
         };
@@ -131,16 +127,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
   useEffect(() => {
     if (!attivo) return;
 
-    function calcolaLatoInquadrato(punti) {
-      const visSx = punti[11].visibility + punti[23].visibility + punti[25].visibility;
-      const visDx = punti[12].visibility + punti[24].visibility + punti[26].visibility;
-      const zSx = punti[11].z + punti[23].z + punti[25].z;
-      const zDx = punti[12].z + punti[24].z + punti[26].z;
-      if (visSx > visDx + 0.2 && zSx < zDx) return 'LEFT';
-      if (visDx > visSx + 0.2 && zDx < zSx) return 'RIGHT';
-      return visSx >= visDx ? 'LEFT' : 'RIGHT';
-    }
-
     function ciclo() {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -163,7 +149,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
         }
-        // Disegna sempre il frame, così funge da placeholder o mantiene il frame a video in pausa
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
@@ -177,7 +162,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
           return;
         }
 
-        // Esegue MediaPipe SOLO se il frame video è andato avanti
         if (isNewFrame && !video.paused) {
           ultimoTempoVideoRef.current = video.currentTime;
 
@@ -189,7 +173,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
 
             const punti = risultati.landmarks[0];
             ultimoPuntiRef.current = punti;
-            const latoRilevato = calcolaLatoInquadrato(punti);
+            const latoRilevato = determinaLatoInquadrato(punti);
             ultimoLatoRef.current = latoRilevato;
 
             const esito = processFrame(esercizio, statoRepRef.current, punti, latoRilevato);
@@ -209,13 +193,13 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
                 contatoreValideRef.current += 1;
                 setValidReps(contatoreValideRef.current);
                 setFaults([]);
-                messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + 2000 };
+                messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + ENGINE.HUD_VALID_MS };
               }
               else {
                 contatoreNonValideRef.current += 1;
                 setNoReps(contatoreNonValideRef.current);
                 setFaults(event.faults);
-                messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + 3000 };
+                messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + ENGINE.HUD_INVALID_MS };
               }
 
               const adesso = new Date();
@@ -234,7 +218,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
             }
           } else {
             framePersiRef.current++;
-            if (framePersiRef.current > 30) {
+            if (framePersiRef.current > ENGINE.TRACKING_LOST_FRAMES) {
               setIsTrackingLost(prev => !prev ? true : prev);
             }
           }
@@ -257,7 +241,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
           canvas.height,
           contatoreValideRef.current,
           messaggioHudRef.current,
-          framePersiRef.current > 30,
+          framePersiRef.current > ENGINE.TRACKING_LOST_FRAMES,
           statoRepRef.current.lastAngle
         );
       }
