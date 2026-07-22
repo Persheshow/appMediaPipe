@@ -22,12 +22,13 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
   const ultimoPuntiRef = useRef(null);
   const ultimoLatoRef = useRef('LEFT');
   const ultimoBersaglioRef = useRef(false);
+
   const contatoreValideRef = useRef(0);
   const contatoreNonValideRef = useRef(0);
   const messaggioHudRef = useRef(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isTrackingLost, setIsTrackingLost] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState('Inizializzazione Modello...');
   const [error, setError] = useState(null);
   const [validReps, setValidReps] = useState(0);
   const [noReps, setNoReps] = useState(0);
@@ -40,6 +41,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
     framePersiRef.current = 0;
     ginocchioYSmoothRef.current = null;
     ultimoPuntiRef.current = null;
+
     contatoreValideRef.current = 0;
     contatoreNonValideRef.current = 0;
     messaggioHudRef.current = null;
@@ -91,6 +93,8 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
         elVideo.srcObject = null;
         elVideo.src = videoUrl;
         elVideo.load();
+
+        // Forza il caricamento del primo frame visivo appena i dati sono pronti (Placeholder)
         elVideo.onloadeddata = () => {
           elVideo.currentTime = 0.001;
         };
@@ -149,6 +153,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
         }
+        // Disegna sempre il frame, così funge da placeholder o mantiene il frame a video in pausa
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
@@ -162,6 +167,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
           return;
         }
 
+        // Esegue MediaPipe SOLO se il frame video è andato avanti
         if (isNewFrame && !video.paused) {
           ultimoTempoVideoRef.current = video.currentTime;
 
@@ -226,13 +232,25 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
 
         const erroreLampeggiante = messaggioHudRef.current && performance.now() < messaggioHudRef.current.expires && messaggioHudRef.current.type === 'INVALID';
 
-        // Usa la cache per stampare lo scheletro anche se il video è in pausa
+        // Usa la cache per stampare lo scheletro anche se il video è in pausa.
+        // Lo scheletro viene disegnato con lo stesso specchiamento applicato al
+        // video (vedi 'specchiato' più sopra): i landmark di MediaPipe sono
+        // sempre nel sistema di coordinate "grezzo" del video originale, quindi
+        // vanno disegnati nella stessa trasformazione usata per il frame video,
+        // altrimenti risultano visivamente disallineati/specchiati rispetto al
+        // corpo mostrato a schermo con fotocamera frontale.
         if (ultimoPuntiRef.current) {
+          ctx.save();
+          if (specchiato) {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+          }
           drawSkeleton(ctx, ultimoPuntiRef.current, canvas.width, canvas.height, ultimoBersaglioRef.current, ultimoLatoRef.current, esercizio, erroreLampeggiante);
           if (esercizio === 'SQUAT') {
             const puntoGinocchio = ultimoPuntiRef.current[ESERCIZI.SQUAT.landmarks[ultimoLatoRef.current].knee];
             drawSquatOverlays(ctx, canvas.width, canvas.height, puntoGinocchio, ultimoBersaglioRef.current, ginocchioYSmoothRef);
           }
+          ctx.restore();
         }
 
         drawHUD(
@@ -250,7 +268,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
 
     frameIdRef.current = requestAnimationFrame(ciclo);
     return () => { if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
-  }, [esercizio, attivo, latoCamera, videoUrl]);
+  }, [esercizio, attivo, latoCamera, videoUrl, logCallback]);
 
   function reset() {
     statoRepRef.current = createInitialState();
@@ -270,5 +288,5 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
     setIsTrackingLost(false);
   }
 
-  return { videoRef, canvasRef, isLoading, isTrackingLost, loadingMsg, error, validReps, noReps, faults, angles, reset };
+  return { videoRef, canvasRef, isLoading, isTrackingLost, error, validReps, noReps, faults, angles, reset };
 }

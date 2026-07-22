@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePose } from './hooks/usePose';
 import { useVideoRecorder } from './hooks/useVideoRecorder';
 import logoUnifi from './assets/logo_unifi.png';
@@ -55,9 +55,9 @@ export default function App() {
   // Stato per il timer pre-start
   const [contoAllaRovescia, setContoAllaRovescia] = useState(null);
 
-  const aggiungiLogRipetizione = (nuovoLog) => {
+  const aggiungiLogRipetizione = useCallback((nuovoLog) => {
     setLogSessione(prev => [...prev, nuovoLog]);
-  };
+  }, []);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -73,7 +73,6 @@ export default function App() {
     isLoading: caricamentoModello,
     error: erroreModello,
     validReps: ripetizioniValide,
-    reset: resetConteggio,
   } = usePose(esercizioScelto, allenamentoAvviato, cameraLato, staRegistrando, aggiungiLogRipetizione, modalitaAcquisizione === 'file' ? videoUrl : null);
 
   const { startRecording: avviaRegistrazione, stopRecording: fermaRegistrazione } =
@@ -280,10 +279,10 @@ export default function App() {
               }}
               disabled={contoAllaRovescia !== null}
               className={`w-full mt-4 flex items-center justify-center gap-3 py-4 text-sm font-bold tracking-widest rounded-none border transition-none ${contoAllaRovescia !== null
-                  ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
-                  : staRegistrando
-                    ? 'bg-red-600 text-white border-red-600 animate-pulse'
-                    : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
+                ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
+                : staRegistrando
+                  ? 'bg-red-600 text-white border-red-600 animate-pulse'
+                  : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
                 }`}
             >
               {contoAllaRovescia !== null

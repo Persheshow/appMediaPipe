@@ -13,7 +13,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
 
         try {
             registratoreRef.current = new MediaRecorder(flusso, opzioni);
-        } catch (e) {
+        } catch {
             registratoreRef.current = new MediaRecorder(flusso);
         }
 
